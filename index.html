@@ -1446,6 +1446,7 @@ const CAR_MODELS = {}; // car id -> { scene, turn, name }
 const PROP_URLS = {
   c17: { url: 'models/c17/scene.json', credit: '"C17 Plane Game-Ready" by HaVe, CC BY 4.0' },
   hst: { url: 'models/hst/scene.json', credit: '"Train - Intercity 125 Executive with Buffers" by timblewee, CC BY 4.0' },
+  syd: { url: 'models/syd/scene.json', credit: '"Sydney Metro Driverless Train Alstom Metropolis" by JoTrain The Aussie, Sketchfab Standard' },
 };
 const PROP_MODELS = {}, propWait = {};
 function whenProp(id, fn) { if (PROP_MODELS[id]) fn(PROP_MODELS[id]); else (propWait[id] = propWait[id] || []).push(fn); }
@@ -3141,7 +3142,7 @@ function trainRideCamera(C, dt) {
     _rl.copy(p); _rl.y = cy + .5; fov = 50;
   } else if (shot === 'edge') { // beyond the far edge of the deck, the police car sailing off towards the lens in slow motion
     const af = frameAt(main, P.s + 6);
-    _rc.copy(af.pos).addScaledVector(af.right, TRAIN.TD + 12); _rc.y = af.pos.y + 3.2;
+    _rc.copy(af.pos).addScaledVector(af.right, TRAIN.TD + 9); _rc.y = af.pos.y + TRAIN.DECK + 1;
     _rl.copy(cp).lerp(p, .3); _rl.y = ccy + .6; fov = 44;
   } else if (shot === 'impact') { // at the side of the wagons just ahead of the hit, travelling with it, in slow motion
     const af = frameAt(main, P.s + 8);
@@ -3629,11 +3630,45 @@ function trainProfile() { // x = 0 is the back of the last wagon; you land on th
     segs: [linSeg(0, T.DECK, k0, T.DECK), linSeg(k0, T.DECK, lastEnd, T.KICK_H), clearArc(lastEnd, T.KICK_H, land, 0, locoRear - 1, locoFront + 1, T.LOCO_H, .5)] };
 }
 
+// The Sydney Metro model: three cars along +x (the driving cab at the +x end), 3.05 m wide with the roof at 4.12 m.
+// Each car's meshes are merged by material once, so a game car costs a handful of draw calls.
+const SYD_CARS = { lead: [-9.86, 13.27], panto: [-31.72, -9.82], trailer: [-53.6, -31.7] };
+let sydParts = null;
+function sydSplit(m) {
+  if (sydParts) return sydParts;
+  m.updateMatrixWorld(true); sydParts = {};
+  const bb = new THREE.Box3(), c = new THREE.Vector3(), v = new THREE.Vector3(), mn = new THREE.Matrix3();
+  for (const [k, [x0, x1]] of Object.entries(SYD_CARS)) {
+    const byMat = new Map();
+    m.traverse(o => { if (!o.isMesh || /panto_(lower|upper|head)/i.test(o.name + (o.parent ? o.parent.name : ''))) return; bb.setFromObject(o).getCenter(c); if (c.x < x0 || c.x >= x1) return; (byMat.get(o.material) || byMat.set(o.material, []).get(o.material)).push(o); });
+    sydParts[k] = { len: x1 - x0, x0, meshes: [...byMat].map(([mat, list]) => {
+      let nv = 0, ni = 0; for (const o of list) { nv += o.geometry.attributes.position.count; ni += o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count; }
+      const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), U = new Float32Array(nv * 2), I = new Uint32Array(ni); let ov = 0, oi = 0;
+      for (const o of list) { const g = o.geometry, pa = g.attributes.position, na = g.attributes.normal, ua = g.attributes.uv; mn.getNormalMatrix(o.matrixWorld);
+        for (let i = 0; i < pa.count; i++) { v.fromBufferAttribute(pa, i).applyMatrix4(o.matrixWorld); P.set([v.x, v.y, v.z], (ov + i) * 3);
+          if (na) { v.fromBufferAttribute(na, i).applyMatrix3(mn).normalize(); N.set([v.x, v.y, v.z], (ov + i) * 3); } if (ua) { U[(ov + i) * 2] = ua.getX(i); U[(ov + i) * 2 + 1] = ua.getY(i); } }
+        if (g.index) for (let i = 0; i < g.index.count; i++) I[oi++] = g.index.getX(i) + ov; else for (let i = 0; i < pa.count; i++) I[oi++] = i + ov;
+        ov += pa.count; }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(P, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(N, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(U, 2)); geo.setIndex(new THREE.BufferAttribute(I, 1));
+      geo.computeBoundingSphere(); return { geo, mat };
+    }) };
+  }
+  return sydParts;
+}
+// one Sydney Metro car stretched over a game car of length L (z from 0 at the back to L at the front); rev turns it to face backwards
+function sydCar(m, kind, L, rev) {
+  const S = sydSplit(m)[kind], T = TRAIN, inner = new THREE.Group(), wrap = new THREE.Group();
+  for (const { geo, mat } of S.meshes) { const o = new THREE.Mesh(geo, mat); o.castShadow = !mat.transparent; inner.add(o); }
+  inner.rotation.y = -Math.PI / 2; inner.position.z = -S.x0; wrap.add(inner);
+  wrap.scale.set(T.W / 3.05, T.DECK / 4.12, L / S.len); if (rev) { wrap.rotation.y = Math.PI; wrap.position.z = L; }
+  return wrap;
+}
 // the rolling stock for one train: wagons from the back (x = 0) forward, then a short buffer car, then the engine
 function buildTrainCars(M, pr, part, kit) {
   const T = TRAIN, st = M.style, W2 = T.W, DK = T.DECK;
   const C = h => new THREE.Color(h), std = (col, o = {}) => new THREE.MeshStandardMaterial({ color: col, roughness: .55, metalness: .3, ...o });
   const box = (w, h, d, m, x, y, z, g) => kit.box(w, h, d, m, x, y, z, g);
+  const sydFit = (grp, stand, kind, L, rev) => whenProp('syd', m => { grp.add(sydCar(m, kind, L, rev)); stand.visible = false; });
   const ribTex = (col, text, ribs, door) => canvasTex(512, 128, (g, w, h) => { g.fillStyle = col; g.fillRect(0, 0, w, h);
     for (let x = 0; x < w; x += ribs) { g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(x, 0, 3, h); g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(x + 3, 0, 2, h); }
     for (let i = 0; i < 60; i++) { g.fillStyle = `rgba(${rand(60, 110) | 0},${rand(30, 50) | 0},10,${rand(.05, .2)})`; g.fillRect(rand(0, w), rand(0, h), rand(4, 30), rand(2, 16)); } // weathering
@@ -3658,7 +3693,8 @@ function buildTrainCars(M, pr, part, kit) {
   const silver = std('#c9ced6', { metalness: .85, roughness: .25 }), blueBand = std('#1f5fd6', { roughness: .4 }), winMat = new THREE.MeshStandardMaterial({ color: '#10161f', roughness: .1, metalness: .6, emissive: C('#ffe6b0'), emissiveIntensity: .25 });
   // --- wagons ---
   for (let i = 0; i < T.N; i++) {
-    const x0 = pr.wag0 + i * (T.WAG + T.GAPW), g = part(x0, T.WAG), L = T.WAG;
+    const x0 = pr.wag0 + i * (T.WAG + T.GAPW), g0 = part(x0, T.WAG), L = T.WAG;
+    let g = g0; if (st === 'metro') { g = new THREE.Group(); g0.add(g); sydFit(g0, g, i % 2 ? 'trailer' : 'panto', L, false); } // box stand-in until the real metro car arrives
     if (st === 'freight') { // yellow spine flatcar with two 40 ft boxes side by side
       box(W2 * .8, .45, L - .2, frameY, 0, 1.3, L / 2, g); box(W2 * .25, .7, L - .4, frameY, 0, 1, L / 2, g);
       const half = (W2 - .15) / 2; for (const sx of [-1, 1]) box(half, DK - 1.55, L - .9, contMats[(i * 3 + (sx > 0 ? 1 : 0) * 5) % 8], sx * (half / 2 + .04), 1.55 + (DK - 1.55) / 2, L / 2, g);
@@ -3678,7 +3714,7 @@ function buildTrainCars(M, pr, part, kit) {
         for (const z of [L * .25, L * .75]) box(.06, 2.3, 1.8, std('#9aa1aa', { metalness: .9, roughness: .3 }), sx * (W2 / 2 + .03), 2.45, z, g); }
       box(W2 - .1, .05, L - .3, roofMat, 0, DK - .02, L / 2, g); box(W2 - 1, .4, L - .6, std('#2a2d33'), 0, 1.05, L / 2, g); // underframe gear
     }
-    truck(g, 2.6, 2); truck(g, L - 2.6, 2); couplerAt(g, -.2); couplerAt(g, L + .2);
+    truck(g, 2.6, 2); truck(g, L - 2.6, 2); g = g0; couplerAt(g, -.2); couplerAt(g, L + .2);
     if (i < T.N - 1) topPlate(g, L);
     if (i === 0) for (const sx of [-1, 1]) { const l = new THREE.Mesh(new THREE.SphereGeometry(.18, 8, 6), kit.red()); l.position.set(sx * (W2 / 2 - .3), 2, -.1); g.add(l); } // rear markers
     if (i === T.N - 1) { // kicker at the front of the last wagon's roof: it throws you over the engine
@@ -3729,7 +3765,10 @@ function buildTrainCars(M, pr, part, kit) {
     box(W2, T.LOCO_H - 1.3, L - 4, icBody, 0, 1.3 + (T.LOCO_H - 1.3) / 2, (L - 4) / 2, stand); const nz = box(W2, 2.4, 4, std('#f2c200'), 0, 2.4, L - 2.2, stand); nz.rotation.x = -.3;
     fit(g, false);
     const rg = part(pr.wag0 - L - .6, L); const rs = new THREE.Group(); rg.add(rs); rg.userData.stand = rs; box(W2, T.LOCO_H - 1.3, L - 4, icBody, 0, 1.3 + (T.LOCO_H - 1.3) / 2, L / 2 + 2, rs); fit(rg, true);
-  } else { // metro lead car: a raked windscreen, headlights and a destination sign
+  } else { // metro lead car: a raked windscreen, headlights and a destination sign (a stand-in for the Sydney Metro cab), and a cab at the back too
+    const g0 = g, s0 = new THREE.Group(); g0.add(s0);
+    { const rg = part(pr.wag0 - L - .6, L), rs = new THREE.Group(); rg.add(rs); box(W2, DK - 1.1, L - .3, silver, 0, 1.1 + (DK - 1.1) / 2 - .05, L / 2, rs); sydFit(rg, rs, 'lead', L, true); }
+    { const g = s0;
     box(W2, DK - 1.1, L - 3, silver, 0, 1.1 + (DK - 1.1) / 2 - .05, (L - 3) / 2, g);
     for (const sx of [-1, 1]) { box(.04, 1.1, L - 4, winMat, sx * (W2 / 2 + .01), 3.1, (L - 3) / 2, g); box(.05, .35, L - 3, blueBand, sx * (W2 / 2 + .02), 2.2, (L - 3) / 2, g); }
     const nose = box(W2, DK - 1.1, 3.4, silver, 0, 1.1 + (DK - 1.1) / 2 - .05, L - 2.2, g); nose.scale.y = .96;
@@ -3737,7 +3776,8 @@ function buildTrainCars(M, pr, part, kit) {
     for (const sx of [-1, 1]) box(.7, .2, .08, MAT.head, sx * 2.2, 1.8, L - .45, g);
     box(2.2, .35, .06, std('#111', { emissive: C('#ffb020'), emissiveIntensity: 1.6 }), 0, 4.1, L - .5, g);
     box(W2 - .1, .05, L - .5, roofMat, 0, DK - .02, (L - .5) / 2, g); const pan = box(.1, 1.2, 2.2, kit.steel, 0, DK + .5, L * .5, g); pan.rotation.x = .6; // pantograph
-    truck(g, 2.6, 2); truck(g, L - 3.4, 2);
+    truck(g, 2.6, 2); truck(g, L - 3.4, 2); }
+    sydFit(g0, s0, 'lead', L, false);
   }
   const hl = new THREE.Mesh(new THREE.PlaneGeometry(6, 26), new THREE.MeshBasicMaterial({ map: beamTex, color: new THREE.Color(.28, .28, .26), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 }));
   hl.rotation.x = -Math.PI / 2; hl.position.set(0, .06, L + 13); g.add(hl);

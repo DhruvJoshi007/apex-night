@@ -1,0 +1,8 @@
+Model Information:
+* title:	Sydney Metro Driverless Train  Alstom Metropolis
+* source:	https://sketchfab.com/3d-models/sydney-metro-driverless-train-alstom-metropolis-f926db4de6964070aa70915c505ebf64
+* author:	JoTrain The Aussie 🇦🇺 (https://sketchfab.com/Jotrain)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works
