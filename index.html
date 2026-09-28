@@ -129,6 +129,13 @@ button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 #bioTitle b{display:block;font-family:var(--display);font-style:italic;font-weight:900;font-size:clamp(38px,7.5vw,92px);letter-spacing:.06em;line-height:1}
 #bioTitle .st{display:block;font-family:var(--ui);font-weight:700;font-size:12px;letter-spacing:.5em;color:var(--amber);margin-bottom:10px}
 #bioTitle .sb{display:block;font-family:var(--ui);font-weight:600;font-size:13px;letter-spacing:.3em;margin-top:12px;color:rgba(255,255,255,.85)}
+#skyHud{position:absolute;left:0;right:0;bottom:calc(16% + 64px);text-align:center;pointer-events:none;font-family:var(--ui);text-transform:uppercase;opacity:0;transition:opacity .4s;z-index:4}
+#skyHud.on{opacity:1}
+#skyHud b{display:block;font-weight:800;font-size:13px;letter-spacing:.3em;color:#fff;text-shadow:0 1px 12px rgba(0,0,0,.85)}
+#skyHud i{display:block;margin-bottom:10px;font-style:italic;font-family:var(--display);font-weight:900;font-size:clamp(26px,4.5vw,46px);letter-spacing:.08em;color:#ff3b30;text-shadow:0 0 18px rgba(255,40,30,.8);opacity:0}
+#skyHud.lock i{opacity:1;animation:skyLock .3s steps(2) infinite}
+@keyframes skyLock{50%{opacity:.2}}
+#hud.movie #skyHud{opacity:0!important}
 #bioTitle.show{animation:bioT 4.4s ease forwards}
 #bioTitle.show b{animation:bioB 4.4s cubic-bezier(.2,.9,.3,1) forwards}
 @keyframes bioT{0%{opacity:0;transform:translateY(10px)}10%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
@@ -318,6 +325,7 @@ button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
     <div id="movieTitle"></div>
     <div id="finaleTitle"></div>
     <div id="bioTitle"></div>
+    <div id="skyHud"><i>Missile lock</i><b></b></div>
     <div id="popups"></div>
     <div id="countdown"></div>
     <div id="copHud"><i></i><span></span></div>
@@ -1434,6 +1442,13 @@ const MODEL_URLS = {
   m4csl: { url: 'models/m4csl/scene.json', turn: 1, credit: '"BMW M4csl" by Mpgs Studios, CC BY 4.0' },
 };
 const CAR_MODELS = {}; // car id -> { scene, turn, name }
+// props published with the game (the cargo plane and the InterCity 125 power car); scenes wait on whenProp until they arrive
+const PROP_URLS = {
+  c17: { url: 'models/c17/scene.json', credit: '"C17 Plane Game-Ready" by HaVe, CC BY 4.0' },
+  hst: { url: 'models/hst/scene.json', credit: '"Train - Intercity 125 Executive with Buffers" by timblewee, CC BY 4.0' },
+};
+const PROP_MODELS = {}, propWait = {};
+function whenProp(id, fn) { if (PROP_MODELS[id]) fn(PROP_MODELS[id]); else (propWait[id] = propWait[id] || []).push(fn); }
 const gltfLoader = THREE.GLTFLoader ? new THREE.GLTFLoader() : null;
 if (gltfLoader && THREE.DRACOLoader) { const d = new THREE.DRACOLoader(); d.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/libs/draco/gltf/'); gltfLoader.setDRACOLoader(d); }
 // body paint: a material named like 'paint', 'body' or '..._ext1'; otherwise the largest non-excluded material
@@ -1757,6 +1772,9 @@ const GORGE = { RAMP: 22, RAMP_H: 3.4, AIR: 76, APEX: 12.5, OVER: 10, DEPTH: 92,
 // the metro bridge (p8): a full-width kicker RAMP long; the carriage floor sits FLOOR above the road, LIP past the lip, and the
 // flight peaks at APEX right in the middle of the carriage so the car threads its doors
 const METRO = { RAMP: 16, RAMP_H: 2.6, LIP: 30, FLOOR: 6.7, APEX: 7.25, CW: 3.1, CL: 16.4, CP: 17.2, N: 4, DX: 5.4, DW: 2.9, DH: 2.35, ROOF: 2.75, DECK: 5.45, TRIG: 900, SCENE: 620, STOP: 140 };
+// the bay crossing (p9): a kicker RAMP long and RAMP_H high across all lanes throws you up into a cargo plane's open hold,
+// whose floor is HC above the road CATCH past the lip; the flight lasts FLY along the road, and the drop is from DROP_H
+const OCEAN = { RAMP: 30, RAMP_H: 7, CATCH: 52, HC: 11, APEX: 12.6, FLY: 2400, DROP_H: 30, DROP_L: 150, S: 1.35 };
 const JUMP = { LEAF: 18, LEAF_H: 2.8, GAP: 30, RAMP: 11, RAMP_H: 1.9, TRUCK_H: 4.1, TRUCK_L: 18.5, CARRIER_L: 21, DECK_H: 3.4, ROLL_L: 12, ROLL_H: 2.4, ROLL_AIR: 50, ROLL_APEX: 7.4 };
 // parabola from (s0,h0) to (s1,h1) peaking at ha
 function arcSeg(s0, h0, s1, h1, ha) {
@@ -1787,6 +1805,7 @@ function planSetPieces(main, branches, def) {
   // the Grand Tour gets trick ramps spread through its terrains (never the same trick twice running) and a jump over a mountain gorge
   const MS = METRO.RAMP + METRO.LIP * (1 + Math.sqrt(METRO.APEX / (METRO.APEX - METRO.RAMP_H)));
   const want = G ? [
+    { kind: 'ocean', span: OCEAN.FLY + OCEAN.DROP_L, pre: 600, post: 150, chk: OCEAN.RAMP + OCEAN.CATCH + 120, sAt: G.frac('coast', .4), lo: G.frac('coast', .2), hi: G.frac('coast', .99) },
     { kind: 'metro', span: MS, pre: 90, post: 80, sAt: G.frac('city', .5), lo: G.frac('city', .3), hi: G.frac('city', .8) },
     { kind: 'roll', trick: 'roll', span: RS, pre: 60, post: 40, sAt: G.frac('city', .88), lane: 2 },
     { kind: 'roll', trick: 'spin', span: RS, pre: 60, post: 40, sAt: G.frac('desert', .08), lane: 0 },
@@ -1797,7 +1816,7 @@ function planSetPieces(main, branches, def) {
     { kind: 'roll', trick: 'spin', span: RS, pre: 60, post: 40, sAt: G.frac('snow', .45), lane: 2 },
     { kind: 'roll', trick: 'flip', span: RS, pre: 60, post: 40, sAt: G.frac('forest', .3), lane: 2 },
     { kind: 'roll', trick: 'corkscrew', span: RS, pre: 60, post: 40, sAt: G.frac('jungle', .5), lane: 0 },
-    { kind: 'roll', trick: 'spin', span: RS, pre: 60, post: 40, sAt: G.frac('coast', .62), lane: 0 },
+    { kind: 'roll', trick: 'spin', span: RS, pre: 60, post: 40, sAt: G.frac('coast', .1), lane: 0 },
     { kind: 'roll', trick: 'roll', span: RS, pre: 60, post: 40, sAt: G.frac('city', .3, 1), lane: 1 },
   ] : [
     { kind: 'bridge', span: 2 * JUMP.LEAF + JUMP.GAP, pre: 60, post: 50, at: .3 },
@@ -1810,8 +1829,11 @@ function planSetPieces(main, branches, def) {
     for (let k = 0; k < 240 && !found; k++) {
       const s = (w.sAt ?? L * w.at) + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 23;
       if (w.lo !== undefined && (s - w.pre < w.lo || s + w.span + w.post > w.hi)) continue;
-      const wide = w.kind === 'bridge' || w.kind === 'gorge' || w.kind === 'metro';
-      if (clear(s - w.pre, s + w.span + w.post, wide) && straight(s - w.pre, s + w.span + w.post, wide ? .0048 : .0065, wide ? .03 : .05)) found = s;
+      const wide = w.kind === 'bridge' || w.kind === 'gorge' || w.kind === 'metro' || w.kind === 'ocean';
+      // the bay crossing only needs the kicker and the landing clear of forks and merges: it flies over everything between
+      const ok = w.kind === 'ocean' ? clear(s - w.pre, s + w.chk, false) && clear(s + OCEAN.FLY - 700, s + w.span + w.post, false) && !out.some(p => s + w.span + w.post > p.z0 - 200 && s - w.pre < p.z1 + 200)
+        : clear(s - w.pre, s + w.span + w.post, wide);
+      if (ok && straight(s - (w.chk ? 250 : w.pre), s + (w.chk || w.span + w.post), wide ? .0048 : .0065, wide ? .03 : .05)) found = s;
     }
     if (found === null) continue;
     const s = found, p = { kind: w.kind, s0: s, z0: s - w.pre, z1: s + w.span + w.post, segs: [] };
@@ -1825,6 +1847,13 @@ function planSetPieces(main, branches, def) {
       p.lipA = s + RAMP; p.lipB = land - OVER; p.sEnd = land; p.all = true; p.gorge = true;
       p.segs = [linSeg(s, 0, s + RAMP, RAMP_H), arcSeg(s + RAMP, RAMP_H, land, 0, APEX)];
       p.cut = [p.lipA, p.lipB];
+    } else if (w.kind === 'ocean') { // up the kicker into the plane's hold; the long level stretch is the flight, the last arc the drop back onto the road
+      const { RAMP, RAMP_H, CATCH, HC, APEX, FLY, DROP_H, DROP_L } = OCEAN, lip = s + RAMP, sc = lip + CATCH, sd = s + FLY, land = sd + DROP_L;
+      p.lipA = lip; p.sc = sc; p.sEnd = land; p.all = true; p.ocean = true; p.z0 = s - w.pre;
+      p.segs = [linSeg(s, 0, lip, RAMP_H), arcSeg(lip, RAMP_H, sc, HC, APEX), linSeg(sc, HC, sd, HC), arcSeg(sd, DROP_H, land, 0, DROP_H + .4)];
+      p.base = { segs: p.segs.slice(), sEnd: land };
+      // everyone else (and you, with no plane) just jumps off it back onto the road
+      p.alt = { kind: 'oceanMiss', all: true, s0: s, sEnd: lip + 74, segs: [p.segs[0], arcSeg(lip, RAMP_H, lip + 74, 0, RAMP_H + 3.5)] };
     } else if (w.kind === 'metro') { // up a kicker across the whole road, through the carriage at the top of the arc, down beyond the bridge
       const { RAMP, RAMP_H, LIP, APEX } = METRO, lip = s + RAMP, sc = lip + LIP, land = sc + LIP * Math.sqrt(APEX / (APEX - RAMP_H));
       p.lipA = lip; p.sc = sc; p.sEnd = land; p.all = true; p.metro = true; p.z0 = s - 160;
@@ -2718,7 +2747,7 @@ function buildWorld(def) {
   const lines = makeSpeedLines();
 
   const W = { pieces, extras, setBlink, tumble, def, main, routes, branches, scene, root, skyMesh, ring, sun, sunOffset, sunDir: sky.sunDir.clone().normalize(), flare, night, groundY, obstacles, cones, setCone, coneMesh, bandMesh, arrowMats, pickups, sparks, smoke, lines, hemi, G, GW,
-    bloom: night ? [1.0, 0.55, 0.8] : [0.55, 0.5, 0.9], exposure: night ? 1.15 : 0.95, metro: GW ? GW.metro : null };
+    bloom: night ? [1.0, 0.55, 0.8] : [0.55, 0.5, 0.9], exposure: night ? 1.15 : 0.95, metro: GW ? GW.metro : null, ocean: GW ? GW.ocean : null };
   if (GW) GW.attach(W);
   return W;
 }
@@ -2764,12 +2793,13 @@ function jumpUpdate(r) {
     if (r.s < s0 || r.s > s0 + 4) continue;
     if (!p.all && Math.abs(r.d - p.d) > 2.4) continue;
     if (p.metro && !r.isPlayer && !r.isCop && W.metro && W.metro.busy()) continue; // rivals stay on the road under the train
+    if (p.ocean && !(r.isPlayer && W.ocean && W.ocean.ready())) p = p.alt; // only you get the plane; everyone else just jumps
     if (p.kind === 'board') { // only you take the train ramp; with no train lined up beside it, it drops you back in the lane
       if (!r.isPlayer) continue;
       const TM = trainFor(p); if (!TM || TM.boarded || Math.abs(p.sEnd - TRAIN.LAND_X - TM.v * (p.sEnd - r.s) / Math.max(r.v, 20) - TM.s) > 40) p = p.alt;
     }
     r.jump = { p, i: 0 }; r.airY = 0; r.flip = 0; r.airV = 0;
-    if (r.isPlayer && R.state === 'race') { if (p.metro && W.metro) metroStartJump(); else startJumpCine(p); }
+    if (r.isPlayer && R.state === 'race') { if (p.metro && W.metro) metroStartJump(); else if (p.ocean && W.ocean) W.ocean.startJump(); else startJumpCine(p); }
     return;
   }
 }
@@ -2782,6 +2812,8 @@ function touchDown(r, p, segI) {
   if (p.kind === 'bridge') { pop('Barely made it!', 'var(--amber)', 'bridge jump'); R.nearMisses++; nit(.15); }
   else if (p.kind === 'roll') { pop({ roll: 'Barrel roll!', spin: 'Flat 360!', flip: 'Front flip!', corkscrew: 'Corkscrew!' }[p.trick || 'roll'], 'var(--nitro)', '+20% nitro'); nit(.2); }
   else if (p.kind === 'metro') { pop('Through the metro!', 'var(--nitro)', '+30% nitro'); R.nearMisses++; nit(.3); }
+  else if (p.kind === 'ocean') { if (segI === 2) pop('In the hold!', 'var(--nitro)', 'now fly it'); else if (segI < 0) { pop('Back on the road!', 'var(--amber)', '+40% nitro'); nit(.4); R.nearMisses++; R.shake = 1.2; } }
+  else if (p.kind === 'oceanMiss') pop('Big air', 'var(--amber)', 'no plane for you');
   else if (p.kind === 'gorge') { pop('Cleared the gorge!', 'var(--amber)', '+30% nitro'); R.nearMisses++; nit(.3); }
   else if (p.kind === 'over') { pop('Cleared the truck', 'var(--amber)', 'inches to spare'); nit(.15); }
   else if (p.kind === 'train') { if (segI < 0) { pop('Jumped the engine!', 'var(--amber)', '+30% nitro'); nit(.3); r.v *= 1.04; } }
@@ -2798,7 +2830,7 @@ function startJumpCine(p) {
   if (R.cine && (R.cine.type === 'lane' || R.cine.type === 'train')) endCine();
   const M = p.mover, side = M ? (M.d > 0 ? -1 : 1) : p.kind === 'roll' ? -p.dir : p.d > 0 ? -1 : 1;
   R.cine = { type: 'jump', kind: p.kind, p, t: 0, dur: 99, side };
-  const tag = $('laneTag'); tag.textContent = p.kind === 'roll' ? { roll: 'Barrel roll', spin: 'Flat spin', flip: 'Front flip', corkscrew: 'Corkscrew' }[p.trick || 'roll'] : { bridge: 'Drawbridge jump', gorge: 'Gorge jump', over: 'Ramp truck', onto: 'Car carrier', train: 'Off the train', board: 'Onto the train', boardMiss: 'Train jump' }[p.kind] || ''; tag.className = ''; void tag.offsetWidth; tag.className = 'show';
+  const tag = $('laneTag'); tag.textContent = p.kind === 'roll' ? { roll: 'Barrel roll', spin: 'Flat spin', flip: 'Front flip', corkscrew: 'Corkscrew' }[p.trick || 'roll'] : { bridge: 'Drawbridge jump', gorge: 'Gorge jump', over: 'Ramp truck', onto: 'Car carrier', train: 'Off the train', board: 'Onto the train', boardMiss: 'Train jump', oceanMiss: 'Big air' }[p.kind] || ''; tag.className = ''; void tag.offsetWidth; tag.className = 'show';
   $('hud').classList.add('cineLite');
   Sound.whoosh(.55, 1.1);
 }
@@ -2833,11 +2865,15 @@ function jumpCamera(C, dt) {
   } else if (p.kind === 'onto') { // high beside the cab as the car leaves the deck, then low in front as it lands
     if (u < .5 && j) { at(M.prof.front + 2, dM + side * 5, 5.6); fov = 55; }
     else { at(M.prof.front + 14, dM + side * 8, 1.8); fov = 50; }
+  } else if (p.kind === 'oceanMiss') { // beside the road beyond the lip, the car sailing past
+    at(p.s0 + OCEAN.RAMP + 36, side * (MAIN_HW + 12), 3.5); fov = 50;
   } else if (p.kind === 'board' || p.kind === 'boardMiss') { // on the road ahead, the car flying across the lens towards the train
-    at(p.s0 + JUMP.ROLL_L + TRAIN.BOARD_AIR * .8, p.d - 10, 2.3); fov = 50;
+    if (p.kind === 'board' && (R.rideN || 0) % 2) { at(p.s0 + TRAIN.BOARD_L + TRAIN.BOARD_AIR * .55, TRAIN.TD + 11, 6.5); fov = 48; } // or from beyond the line, the car coming over the wagons at you
+    else { at(p.s0 + JUMP.ROLL_L + TRAIN.BOARD_AIR * .8, p.d - 10, 2.3); fov = 50; }
   } else { // train: alongside the engine as you sail over it, then out in front as you land
-    const T = TRAIN, pr = M.prof;
-    if (u < .58) { at(pr.locoRear + T.LOCO * .5, dM + side * 11, T.LOCO_H + 1); fov = 50; }
+    const T = TRAIN, pr = M.prof, alt = ((R.rideN || 1) - 1) % 2;
+    if (alt) { if (u < .5) { at(pr.front + 6, dM + 1.5, T.LOCO_H + 4.5); fov = 56; } else { at(pr.sEnd - 8, lanesFor(MAIN_HW)[2] + 7, 9); fov = 52; } } // over the cab, then high over the landing
+    else if (u < .58) { at(pr.locoRear + T.LOCO * .5, dM + side * 11, T.LOCO_H + 1); fov = 50; }
     else { at(pr.sEnd + 16, lanesFor(MAIN_HW)[2] - 4, 1.3); fov = 46; }
   }
   camera.position.copy(_jc);
@@ -2852,7 +2888,11 @@ function jumpCamera(C, dt) {
    the ballast beside the line, hit their own kicker ramps and stunt onto the roof (a barrel roll to land behind you,
    a flat spin that lands them facing you ahead), then come at you along the roof. The car sidesteps at the last
    moment and they go off the side, or into each other. Jumping off the front ends it. */
-const RIDE_ATTACKS = ['leap', 'drop', 'pair'];
+// Each ride gets two attacks: first one that needs roof ahead of you (a police car landing facing you, two at once,
+// or one lowered onto the roof by a helicopter), then one from behind or the side (a barrel roll onto the roof behind
+// you, or a leap clean over the train). Both come off decks shared across the race, so rides don't repeat.
+const RIDE_ATTACKS = { ahead: ['drop', 'pair', 'heli'], behind: ['leap', 'over'] };
+const RIDE_IDLE = [['heli', 'deck', 'far'], ['side', 'top', 'front'], ['wheel', 'heli', 'side'], ['front', 'far', 'top'], ['top', 'wheel', 'heli'], ['far', 'side', 'deck']];
 const SVC = { L: 9, H: 2.2, AIR: .9, APEX: 3.8 }; // the police kicker ramps, and their flight onto the roof
 function boardTrain(r, TM) {
   const R = race, w = R.world, pos = r.mesh.position;
@@ -2864,10 +2904,14 @@ function boardTrain(r, TM) {
 }
 function startTrainRide(M) {
   const R = race;
-  const order = RIDE_ATTACKS.slice().sort(() => Math.random() - .5);
+  const D = R.rideDeck || (R.rideDeck = {});
+  // Every pairing of an attack from ahead and one from behind, dealt without repeats, so a race's six rides all differ.
+  if (!D.combos || !D.combos.length) { D.combos = []; for (const a of RIDE_ATTACKS.ahead) for (const b of RIDE_ATTACKS.behind) D.combos.push([a, b]); D.combos.sort(() => Math.random() - .5); }
+  const order = D.combos.shift();
+  R.rideN = (R.rideN || 0) + 1;
   R.ride = { M, t: 0, att: null, next: .4, n: 0, order, ts: 1 };
   if (R.cine) endCine();
-  R.cine = { type: 'train', t: 0, dur: 99, shot: '', shotT0: 0, a0: rand(-.4, .4) };
+  R.cine = { type: 'train', t: 0, dur: 99, shot: '', shotT0: 0, a0: rand(-.4, .4), idle: RIDE_IDLE[(R.rideN - 1) % RIDE_IDLE.length] };
   const TT = TRAIN_TYPES[M.style] || TRAIN_TYPES.freight;
   $('movieTitle').innerHTML = `<b>${TT.title}</b><small>${TT.sub}</small>`;
   const hud = $('hud'); hud.classList.remove('movie'); void hud.offsetWidth; hud.classList.add('cine', 'movie');
@@ -2877,6 +2921,7 @@ function endTrainRide() {
   const R = race; if (!R.ride) return;
   for (const c of R.cops || []) { if (c.ride && c.ride.deck && c.wreck <= 0) { c.wreck = 2.5; launch(c, 2, -1); c.fly = -6; } c.ride = null; c.trick = null; }
   for (const g of R.ride.M.svcRamps || []) g.visible = false;
+  const W = R.world; if (W.rideHeli) W.rideHeli.visible = W.rideCable.visible = false;
   R.ride = null;
   if (R.cine && R.cine.type === 'train') { R.camOff = camera.position.clone().sub(R.player.mesh.position); endCine(); }
 }
@@ -2886,16 +2931,24 @@ const RIDE_D = () => { const T = TRAIN; return { BALLAST: T.TD - T.W / 2 - 1.5, 
 function startAttack(V) {
   const R = race, P = R.player, L = R.world.main.L;
   const free = (R.cops || []).filter(c => c.wreck <= 0 && c.route < 0);
-  let kind = V.order[V.n % V.order.length]; if (kind === 'pair' && free.length < 2) kind = 'leap';
-  if (kind !== 'leap' && V.M.prof.lastEnd - TRAIN.KICK - (P.s - V.M.s) < 72) kind = 'leap'; // no room ahead on the roof for one to land facing you
+  let kind = V.order[V.n]; if (kind === 'pair' && free.length < 2) kind = 'drop';
+  if (RIDE_ATTACKS.ahead.includes(kind) && V.M.prof.lastEnd - TRAIN.KICK - (P.s - V.M.s) < 72) kind = V.order.includes('over') ? 'leap' : 'over'; // no room ahead on the roof for one to land facing you
   if (!free.length) { V.next = .4; return; }
+  if (kind === 'heli') { // a helicopter brings one in on a cable and lowers it onto the roof ahead, facing you
+    const c = free[0], D = RIDE_D(), A = { kind, cops: [c], phase: 'sling', t: 0 };
+    c.s = (P.s + 46) % L; c.lap = P.lap; c.dist = P.dist + 46; c.d = D.NEAR; c.v = P.v; c.yaw = 0; c.airY = TRAIN.DECK + 17; c.face = Math.PI; c.trick = null; c.flip = 0; c.laneRoute = -99;
+    c.ride = { A, k: 0, role: 'drop', want: -46, latT: D.NEAR, maxD: D.EDGE + 1, latV: null, sling: 0 };
+    const W = R.world; if (!W.rideHeli) { W.rideHeli = makeHeli(); W.rideHeli.scale.setScalar(1.15); W.rideCable = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, 1, 6), MAT.black); W.scene.add(W.rideHeli, W.rideCable); }
+    W.rideHeli.visible = W.rideCable.visible = true; A.heli = { t: 0 };
+    V.att = A; V.n++; P.lane = 0; Sound.siren(.06); Sound.whoosh(.5, 1.5); return;
+  }
   const roles = kind === 'pair' ? ['leap', 'drop'] : [kind];
   const cops = free.slice(0, roles.length), A = { kind, cops, phase: 'close', t: 0 };
   cops.forEach((c, k) => { // bring them up from behind in the right-hand lanes
     const gap = P.dist - c.dist;
     if (gap > 45 || gap < 12) { let s = P.s - 22 - k * 10; if (s < 0) s += L; c.s = s; c.dist = P.dist - 22 - k * 10; c.lap = P.lap; c.v = P.v + 10; }
     c.d = MAIN_HW - 3 - k * 4; c.yaw = 0; c.airY = 0; c.face = 0; c.trick = null; c.flip = 0;
-    c.ride = { A, k, role: roles[k], want: roles[k] === 'drop' ? -30 : 15, latT: MAIN_HW - 3 - k * 4, maxD: MAIN_HW - 1.1, latV: null };
+    c.ride = { A, k, role: roles[k], want: roles[k] === 'drop' ? -30 : roles[k] === 'over' ? 2 : 15, latT: MAIN_HW - 3 - k * 4, maxD: MAIN_HW - 1.1, latV: null };
   });
   V.att = A; V.n++;
   P.lane = 0;
@@ -2928,11 +2981,25 @@ function updateTrainRide(dt) {
   if (!A) {
     V.next -= dt;
     const left = (M.prof.lastEnd - TRAIN.KICK - (P.s - M.s)) / TRAIN.RIDE; // seconds of roof left
-    if (V.next <= 0 && left > 4.2) startAttack(V);
+    if (V.next <= 0 && left > 4.2 && V.n < V.order.length) startAttack(V);
   } else {
     A.t += dt;
     const cs = A.cops, live = cs.filter(c => c.ride);
-    if (A.phase === 'close') { // catch up in the right lane (the one landing ahead overtakes you on the road)
+    if (A.heli) { // the helicopter: hovering over its load, then climbing away once it lets go
+      const hc = cs[0], W = R.world, h = W.rideHeli, hu = h.userData, ht = A.heli.t += dt, f = frameAt(W.main, hc.s), cp = hc.mesh.position;
+      const away = Math.max(0, ht - 3.5);
+      h.position.copy(cp).addScaledVector(f.fwd, away * 14).addScaledVector(f.right, -away * 6); h.position.y = cp.y + (A.phase === 'sling' ? hc.airY : DK) + 9.5 + away * away * 3;
+      h.rotation.set(0, Math.atan2(-f.fwd.x, -f.fwd.z), 0); hu.body.rotation.x = .1 - away * .05; hu.rotor.rotation.y += dt * 38; hu.tail.rotation.x += dt * 60;
+      const bl = (performance.now() / 1000) % .6; hu.rl.visible = bl < .15; hu.bl.visible = bl > .3 && bl < .45;
+      const cab = W.rideCable; cab.visible = A.phase === 'sling'; if (cab.visible) { const top = h.position.y - 1.5, bot = cp.y + hc.airY + 1.4; cab.position.set(cp.x, (top + bot) / 2, cp.z); cab.scale.set(1, Math.max(.1, top - bot), 1); }
+      if (away > 4) { h.visible = cab.visible = false; A.heli = null; }
+    }
+    if (A.phase === 'sling') { // lowered onto the roof ahead of you, facing you, then let go
+      const c = cs[0], o = c.ride; if (!o) { A.phase = 'after'; A.t = 0; }
+      else { o.sling += dt; const t = o.sling; c.airY = DK + 17 * (1 - smooth(1.2, 3.3, t)); c.face = Math.PI; c.d = D.NEAR; o.latT = D.NEAR;
+        if (t > 2.3) slow = Math.min(slow, .45);
+        if (t >= 3.3) { o.deck = true; c.airY = DK; o.fixV = P.v - 17; A.phase = 'deck'; A.t = 0; copSparks(c, 24, 0); R.shake = .8; Sound.hit(.9, 380); pop('Dropped on the roof', 'var(--hot)', 'from a helicopter'); } }
+    } else if (A.phase === 'close') { // catch up in the right lane (the one landing ahead overtakes you on the road)
       if (live.every(c => Math.abs((P.dist - c.dist) - c.ride.want) < 4) && A.t > 1 || A.t > 4.5) {
         A.phase = 'flank'; A.t = 0; Sound.blip(300, .25, 'sawtooth', .08);
         live.forEach((c, k) => { const o = c.ride; o.latT = D.BALLAST; o.maxD = D.BALLAST + .3; o.rampS = c.s + 26 + k * 6; placeSvcRamp(V, k, o.rampS, D.BALLAST); });
@@ -2942,8 +3009,16 @@ function updateTrainRide(dt) {
         const o = c.ride;
         if (!o.air && !o.deck && c.s > o.rampS && c.s < o.rampS + SVC.L) { c.airY = SVC.H * (c.s - o.rampS) / SVC.L; o.fixV = c.v; }
         if (!o.air && !o.deck && c.s >= o.rampS + SVC.L && c.s < o.rampS + SVC.L + 8) {
-          o.air = { t: 0, d0: c.d }; o.maxD = D.EDGE + 8; o.fixV = o.role === 'drop' ? P.v - 3 : P.v + 2; Sound.whoosh(.55, .8);
+          o.air = { t: 0, d0: c.d }; o.maxD = D.EDGE + 12; o.fixV = o.role === 'drop' ? P.v - 3 : o.role === 'over' ? P.v + (P.dist - c.dist) / .75 : P.v + 2; Sound.whoosh(.55, .8);
           c.trick = o.role === 'drop' ? 'spin' : 'roll'; c.flipDir = 1; c.flip = 0;
+        }
+        if (o.air && o.role === 'over') { // high over the roof and your car, rolling, down on the far side of the line
+          slow = Math.min(slow, .3); o.air.t += dt; const u = clamp(o.air.t / 1.5, 0, 1);
+          c.d = lerp(o.air.d0, D.EDGE + 5, smooth(0, 1, u)); o.latT = c.d; c.airY = lerp(SVC.H, 1.4, u) + 9.8 * 4 * u * (1 - u); c.flip = u;
+          if (u >= 1) { o.air = null; c.flip = 0; c.trick = null; A.phase = 'after'; A.t = 0; A.hit = c.mesh.position.clone();
+            c.ride.deck = false; c.wreck = 3; c.v *= .8; c.spinA = 0; launch(c, 3, 1); c.airY = 1.4; c.fly = 5; c.fallFar = true; copSparks(c, 30, 1);
+            R.shake = .9; Sound.hit(1); R.takedowns++; P.nitro = Math.min(1, P.nitro + .15); pop('Right over the top', 'var(--hot)', 'and off the far side · +15% nitro'); }
+          continue;
         }
         if (o.air) {
           slow = Math.min(slow, .42); o.air.t += dt; const u = clamp(o.air.t / SVC.AIR, 0, 1);
@@ -2992,9 +3067,10 @@ function trainRideCamera(C, dt) {
   const cop = A ? A.cops[0] : null, cp = cop ? cop.mesh.position : null, ccy = cop ? cp.y + cop.airY : 0;
   // choose the shot from what is happening
   let shot;
-  if (!A) { const k = Math.floor(V.t / 2.6) % 3; shot = ['heli', 'deck', 'far'][k]; }
+  if (!A) { const k = Math.floor(V.t / 2.6) % 3; shot = (C.idle || RIDE_IDLE[0])[k]; }
+  else if (A.phase === 'sling') shot = A.cops[0].ride && A.cops[0].ride.sling < 1.7 ? 'heliWide' : 'heliDrop';
   else if (A.phase === 'close') shot = relS(P, cop) < -13 ? 'mirror' : 'road';
-  else if (A.phase === 'flank' || (A.phase === 'deck' && A.cops.some(c => c.ride && c.ride.air))) { const fl = A.cops.find(c => c.ride && c.ride.air); shot = fl ? 'stunt' : 'ballast'; if (fl) C.stuntCop = fl; }
+  else if (A.phase === 'flank' || (A.phase === 'deck' && A.cops.some(c => c.ride && c.ride.air))) { const fl = A.cops.find(c => c.ride && c.ride.air); shot = fl ? (fl.ride.role === 'over' ? 'overTop' : 'stunt') : 'ballast'; if (fl) C.stuntCop = fl; }
   else if (A.phase === 'deck') shot = A.kind === 'pair' ? (A.dodged ? 'clash' : 'headon') : A.dodged ? 'edge' : cop.ride && cop.ride.role === 'drop' ? 'headon' : 'chase';
   else if (A.t < 1.1) shot = A.kind === 'pair' ? 'clash' : 'edge';
   else shot = 'back';
@@ -3011,6 +3087,29 @@ function trainRideCamera(C, dt) {
   } else if (shot === 'far') { // from beyond the train, looking back across the car at the road
     _rc.copy(p).addScaledVector(right, 6).addScaledVector(fwd, 7 - u * 1.5); _rc.y = cy + 2.2 + sway;
     _rl.copy(p).addScaledVector(right, -5); _rl.y = cy + .4; fov = 44;
+  } else if (shot === 'side') { // level with the roof from beyond the far side of the line, tracking along
+    _rc.copy(p).addScaledVector(right, 15).addScaledVector(fwd, 3 - u * 1.2); _rc.y = cy + 1.4 + sway;
+    _rl.copy(p).addScaledVector(fwd, 5); _rl.y = cy + .3; fov = 44;
+  } else if (shot === 'top') { // a drone high over the roof, looking almost straight down on the car and the police on the road
+    _rc.copy(p).addScaledVector(fwd, -5).addScaledVector(right, -3); _rc.y = cy + 26 - u * 2;
+    _rl.copy(p).addScaledVector(fwd, 4).addScaledVector(right, -3); _rl.y = cy; fov = 50;
+  } else if (shot === 'front') { // out ahead of the engine at the lineside, looking back down the whole train
+    const af = frameAt(main, V.M.s + V.M.prof.front + 30 - u * 6);
+    _rc.copy(af.pos).addScaledVector(af.right, TRAIN.TD - 7); _rc.y = af.pos.y + 6.5;
+    _rl.copy(p); _rl.y = cy + .3; fov = 38;
+  } else if (shot === 'wheel') { // down by the wheels on the ballast, the wagons thundering past and the car's nose over the roof edge
+    _rc.copy(p).addScaledVector(right, RIDE_D().SIDE - V.M.d - 1.4 + (V.M.d - P.d)).addScaledVector(fwd, 10 - u * 2); _rc.y = frameAt(main, P.s).pos.y + .8;
+    _rl.copy(p).addScaledVector(fwd, -6); _rl.y = cy - .6; fov = 56;
+  } else if (shot === 'heliWide') { // from the lineside ahead: the helicopter coming in low over the train with a police car on a cable
+    const af = frameAt(main, P.s + 64), h = R.world.rideHeli;
+    _rc.copy(af.pos).addScaledVector(af.right, RIDE_D().BALLAST - 5); _rc.y = af.pos.y + 2.2;
+    _rl.copy(h ? h.position : p).lerp(p, .45); fov = 50;
+  } else if (shot === 'heliDrop') { // low on the roof behind the car, the police car coming down onto the wagons ahead
+    _rc.copy(p).addScaledVector(fwd, -6).addScaledVector(right, .5); _rc.y = cy + 1.3 + sway * .3;
+    _rl.copy(cp); _rl.y = ccy + 1.2; fov = 52;
+  } else if (shot === 'overTop') { // on the far edge of the roof just ahead of the car, looking back up as the police car flies over you
+    _rc.copy(p).addScaledVector(fwd, 5.5).addScaledVector(right, 2.6); _rc.y = cy + .8;
+    const sc = C.stuntCop || cop; _rl.copy(sc.mesh.position).lerp(p, .3); _rl.y = sc.mesh.position.y + sc.airY * .8 + .6; fov = 64;
   } else if (shot === 'mirror') { // ahead of the car on the deck, looking back past it at the police car coming up
     _rc.copy(p).addScaledVector(fwd, 7).addScaledVector(right, 1.6); _rc.y = cy + 1.5;
     _rl.copy(cp).lerp(p, .35); _rl.y += .8; fov = 42;
@@ -3042,7 +3141,7 @@ function trainRideCamera(C, dt) {
     _rl.copy(p); _rl.y = cy + .5; fov = 50;
   } else if (shot === 'edge') { // beyond the far edge of the deck, the police car sailing off towards the lens in slow motion
     const af = frameAt(main, P.s + 6);
-    _rc.copy(af.pos).addScaledVector(af.right, TRAIN.TD + 8); _rc.y = af.pos.y + 1.2;
+    _rc.copy(af.pos).addScaledVector(af.right, TRAIN.TD + 12); _rc.y = af.pos.y + 3.2;
     _rl.copy(cp).lerp(p, .3); _rl.y = ccy + .6; fov = 44;
   } else if (shot === 'impact') { // at the side of the wagons just ahead of the hit, travelling with it, in slow motion
     const af = frameAt(main, P.s + 8);
@@ -3483,6 +3582,7 @@ const TRAIN_TYPES = {
   metro: { title: 'Metro line', sub: 'on the roof of the commuter express · police on the road beside you' },
   diesel: { title: 'The old diesel', sub: 'desert freight · 1950s iron · police in pursuit' },
   freight: { title: 'Freight line', sub: 'double-stack country · police on the ballast' },
+  intercity: { title: 'InterCity 125', sub: 'the express at full chat · police on the line' },
 };
 // stunt ramp trucks: RAMP/RAMP_H is the launch ramp on the semi, CAB where its cab starts; CRAMP the car carrier's loading ramp
 const CONVOY = { RAMP: 16, RAMP_H: 4.2, CAB: 17.6, CAB_L: 4.4, CRAMP: 13, W: 3.2 };
@@ -3496,7 +3596,7 @@ function planExtras(main, branches, pieces, def) {
   // the Grand Tour's cave is one long tunnel through the whole underground section (built with its own look in p7)
   if (G) for (const r of G.ranges) if (r.key === 'cave') { out.tunnels.push({ a: r.a + 6, b: r.b - 6, cave: true }); used.push([r.a, r.b]); }
   // rail lines: one on the short tracks; on the Grand Tour old diesels run in the desert, container freights in the canyon, forest and along the coast, and a metro through the evening city
-  for (const [style, ats] of G ? [['diesel', [.2, .16, .26].map(u => fr('desert', u))], ['diesel', [.7, .64, .76].map(u => fr('desert', u))], ['freight', [.55, .45, .65].map(u => fr('canyon', u))], ['freight', [.55, .45, .65].map(u => fr('forest', u))], ['freight', [.5, .4, .6].map(u => fr('coast', u))], ['metro', [.4, .3, .5].map(u => fr('city', u, 1))]] : [[night ? 'metro' : 'freight', [.42, .56, .3, .66]]]) {
+  for (const [style, ats] of G ? [['diesel', [.2, .16, .26].map(u => fr('desert', u))], ['freight', [.7, .64, .76].map(u => fr('desert', u))], ['intercity', [.55, .45, .65].map(u => fr('canyon', u))], ['freight', [.55, .45, .65].map(u => fr('forest', u))], ['intercity', [.1, .12, .08].map(u => fr('coast', u))], ['metro', [.4, .3, .5].map(u => fr('city', u, 1))]] : [[night ? 'metro' : 'freight', [.42, .56, .3, .66]]]) {
     let s = null, len = 0; for (const L2 of [TRAIN.ZONE, 1100, 960]) { for (const at of ats) { s = find(L2, at, true); if (s !== null) break; } if (s !== null) { len = L2; break; } }
     if (s !== null) { // the boarding ramp is an ordinary set piece in the right lane; its flight ends on the train deck
       const T = TRAIN, b0 = s + T.LEAD, land = b0 + T.BOARD_L + T.BOARD_AIR, d = lanesFor(MAIN_HW)[2];
@@ -3549,6 +3649,12 @@ function buildTrainCars(M, pr, part, kit) {
   const contMats = CONT.map((c, i) => std('#ffffff', { map: ribTex(c, LINES[i], 10, false), roughness: .6, metalness: .35 }));
   const boxMats = ['#7a2a1e', '#5b3a26', '#8c6a2a', '#3f4a52'].map((c, i) => std('#ffffff', { map: ribTex(c, ['APEX & WESTERN', 'SANTA ROSA', 'DESERT PACIFIC', 'ROUTE 66 RY'][i], 18, true), roughness: .8, metalness: .15 }));
   const roofMat = std('#6d6f74', { roughness: .7, metalness: .6 }), frameY = std('#e0a21a', { roughness: .6 }), black = std('#1b1c1f', { roughness: .6 });
+  // InterCity Executive: dark grey over light grey, a band of windows, red and white stripes
+  const icTex = canvasTex(1024, 256, (g, w, h) => { g.fillStyle = '#c4c7c6'; g.fillRect(0, 0, w, h); g.fillStyle = '#3a3e43'; g.fillRect(0, 0, w, h * .56);
+    for (let x = 30; x < w - 60; x += 118) { g.fillStyle = '#10161f'; g.fillRect(x, h * .14, 96, h * .34); g.fillStyle = 'rgba(255,226,170,.35)'; g.fillRect(x + 4, h * .18, 88, h * .12); }
+    g.fillStyle = '#f4f4f2'; g.fillRect(0, h * .56, w, h * .05); g.fillStyle = '#c8102e'; g.fillRect(0, h * .61, w, h * .06);
+    g.fillStyle = '#3a3e43'; g.font = 'italic 800 26px sans-serif'; g.fillText('INTERCITY', w - 200, h * .86); });
+  const icBody = std('#ffffff', { map: icTex, roughness: .45, metalness: .25 });
   const silver = std('#c9ced6', { metalness: .85, roughness: .25 }), blueBand = std('#1f5fd6', { roughness: .4 }), winMat = new THREE.MeshStandardMaterial({ color: '#10161f', roughness: .1, metalness: .6, emissive: C('#ffe6b0'), emissiveIntensity: .25 });
   // --- wagons ---
   for (let i = 0; i < T.N; i++) {
@@ -3562,6 +3668,10 @@ function buildTrainCars(M, pr, part, kit) {
       box(W2, DK - 1.4, L - .4, boxMats[i % 4], 0, 1.35 + (DK - 1.4) / 2 - .05, L / 2, g);
       box(W2 - .1, .08, L - .4, roofMat, 0, DK - .04, L / 2, g); box(1.2, .06, L - .4, std('#7a5a3a', { roughness: .9 }), 0, DK + .02, L / 2, g);
       for (const sx of [-1, 1]) for (const z of [.3, L - .3]) box(.1, DK - 1.3, .1, black, sx * (W2 / 2 + .02), 2.9, z, g); // corner ladders
+    } else if (st === 'intercity') { // a Mk3 coach: long flat sides in Executive livery, a rounded grey roof
+      box(W2, DK - 1.2, L - .3, icBody, 0, 1.2 + (DK - 1.2) / 2 - .05, L / 2, g);
+      box(W2 - .1, .08, L - .3, roofMat, 0, DK - .04, L / 2, g); for (const sx of [-1, 1]) box(.3, .25, L - .3, std('#6a6e73', { roughness: .5 }), sx * (W2 / 2 - .1), DK - .18, L / 2, g);
+      box(W2 - .7, .45, L - 1, black, 0, 1.0, L / 2, g);
     } else { // metro: brushed steel body, a window band, a blue stripe, sliding doors
       box(W2, DK - 1.1, L - .3, silver, 0, 1.1 + (DK - 1.1) / 2 - .05, L / 2, g);
       for (const sx of [-1, 1]) { box(.04, 1.1, L - 1.2, winMat, sx * (W2 / 2 + .01), 3.1, L / 2, g); box(.05, .35, L - .5, blueBand, sx * (W2 / 2 + .02), 2.2, L / 2, g);
@@ -3582,6 +3692,7 @@ function buildTrainCars(M, pr, part, kit) {
   // --- between the last wagon and the engine: a buffer flat, a tank car, or the metro's gangway module ---
   { const len = T.TENDER - 1, g = part(pr.lastEnd + .5, len);
     if (st === 'metro') { box(W2 - .6, DK - 1.4, len, silver, 0, 1.2 + (DK - 1.4) / 2, len / 2, g); box(W2 - .6, .35, len, blueBand, 0, 2.2, len / 2, g); }
+    else if (st === 'intercity') box(W2 - .4, DK - 1.4, len, icBody, 0, 1.2 + (DK - 1.4) / 2, len / 2, g);
     else if (st === 'diesel') { const tk = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, len - .4, 18).rotateX(Math.PI / 2), black); tk.position.set(0, 2.8, len / 2); tk.castShadow = true; g.add(tk); box(W2 * .7, .4, len, black, 0, 1.2, len / 2, g); }
     else { box(W2 * .8, .45, len, frameY, 0, 1.3, len / 2, g); }
     truck(g, len / 2, 2); }
@@ -3611,6 +3722,13 @@ function buildTrainCars(M, pr, part, kit) {
     box(W2 * .82, 1, 1.2, MAT.glass, 0, 5, L - 3.9, g).rotation.x = .5; const hl = new THREE.Mesh(new THREE.CircleGeometry(.35, 16), MAT.head); hl.position.set(0, 4.1, L - .2); g.add(hl);
     box(W2 * .7, .2, 1.4, yel, 0, 3.3, L - .9, g).rotation.x = .9;
     truck(g, 3.4, 2); truck(g, L - 5, 2);
+  } else if (st === 'intercity') { // the InterCity 125 power car (the real model), with one more at the back of the train
+    const fit = (grp, back) => whenProp('hst', m => { const c = m.clone(true); c.scale.set(W2 / 3.02, T.LOCO_H / 4.38, L / 18.5); c.position.set(0, .05 - .21 * T.LOCO_H / 4.38, back ? 10.8 * L / 18.5 : 7.7 * L / 18.5); if (back) c.rotation.y = Math.PI;
+      c.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } }); grp.add(c); if (grp.userData.stand) grp.userData.stand.visible = false; });
+    const stand = new THREE.Group(); g.add(stand); g.userData.stand = stand; // a stand-in until the model arrives
+    box(W2, T.LOCO_H - 1.3, L - 4, icBody, 0, 1.3 + (T.LOCO_H - 1.3) / 2, (L - 4) / 2, stand); const nz = box(W2, 2.4, 4, std('#f2c200'), 0, 2.4, L - 2.2, stand); nz.rotation.x = -.3;
+    fit(g, false);
+    const rg = part(pr.wag0 - L - .6, L); const rs = new THREE.Group(); rg.add(rs); rg.userData.stand = rs; box(W2, T.LOCO_H - 1.3, L - 4, icBody, 0, 1.3 + (T.LOCO_H - 1.3) / 2, L / 2 + 2, rs); fit(rg, true);
   } else { // metro lead car: a raked windscreen, headlights and a destination sign
     box(W2, DK - 1.1, L - 3, silver, 0, 1.1 + (DK - 1.1) / 2 - .05, (L - 3) / 2, g);
     for (const sx of [-1, 1]) { box(.04, 1.1, L - 4, winMat, sx * (W2 / 2 + .01), 3.1, (L - 3) / 2, g); box(.05, .35, L - 3, blueBand, sx * (W2 / 2 + .02), 2.2, (L - 3) / 2, g); }
@@ -3838,7 +3956,7 @@ const BIOMES = {
   coast: { title: 'Coastline', sub: 'Highway One · sunset over the sea', ch: 5,
     sky: { top: '#26306c', mid: '#b4609a', hor: '#ffa262', sunDir: [.82, .09, .5], sunCol: '#ffb072', sunSize: 700, sunGlow: 1.3, cloud: .6, cloudCol: '#e38c7a' },
     fog: ['#d8927e', .0007], hemi: ['#a8a8ff', '#6b3e32', .52], sun: ['#ffb880', 2.4], exposure: .95, bloom: .6, ring: [1.1, .8, .8] },
-  dusk: { title: 'Home Stretch', sub: 'Back into Apex City as the lights come on', ch: 0,
+  dusk: { title: 'Solara City', sub: 'Across the bay as the lights come on', ch: 0,
     sky: { top: '#0e1640', mid: '#44407c', hor: '#ff8c52', sunDir: [.82, .03, .55], sunCol: '#ff9a60', sunSize: 700, sunGlow: 1.4, cloud: .5, cloudCol: '#a26272' },
     fog: ['#5c4262', .0008], hemi: ['#7076b8', '#2a1a20', .48], sun: ['#ff9a60', 1.3], exposure: 1.06, bloom: .75, ring: [.7, .6, .8] },
 };
@@ -4393,7 +4511,7 @@ function buildGrand(W) {
     },
   };
   buildGrandEvents(W, ctx, api);
-  W.idx = idx; api.metro = buildMetro(W, T);
+  W.idx = idx; api.metro = buildMetro(W, T); api.ocean = buildOcean(W, T, SEA);
   return api;
 }
 
@@ -4674,7 +4792,7 @@ function buildGrandEvents(W, c, api) {
   const rockMat = new THREE.MeshStandardMaterial({ color: '#7b7168', roughness: .95, flatShading: true });
   const rocks = []; for (let k = 0; k < 14; k++) { const g = new THREE.IcosahedronGeometry(1, 1), p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) * rand(.8, 1.2), p.getY(i) * rand(.8, 1.2), p.getZ(i) * rand(.8, 1.2)); g.computeVertexNormals(); const m = new THREE.Mesh(g, rockMat); m.castShadow = true; m.visible = false; root.add(m); rocks.push({ m, r: rand(1.4, 3.2) }); }
   // --- two jets for the flyover on the coast ---
-  const jetS = G.frac('coast', .4);
+  const jetS = G.frac('coast', .12);
   const makeJet = () => {
     const g = new THREE.Group(), grey = new THREE.MeshStandardMaterial({ color: '#8d96a0', roughness: .4, metalness: .6 });
     const body = new THREE.Mesh(new THREE.CylinderGeometry(.9, .7, 14, 10).rotateX(Math.PI / 2), grey); g.add(body);
@@ -4785,7 +4903,7 @@ function showBioTitle(i) {
 }
 function grandStep(dt) {
   const R = race, W = R.world, GW = W.GW, P = R.player; if (!GW) return;
-  if (!R.grand) { R.grand = { shown: {} }; GW.resetEvents(); if (W.metro) W.metro.reset(); }
+  if (!R.grand) { R.grand = { shown: {} }; GW.resetEvents(); if (W.metro) W.metro.reset(); if (W.ocean) W.ocean.reset(); }
   if (R.state !== 'race') return;
   const g = R.grand, G = W.G, ps = P.route < 0 ? P.s : mainEq(P);
   if (!g.shown[0]) { g.shown[0] = 1; showBioTitle(0); }
@@ -5235,6 +5353,455 @@ function metroCamera(C, dt) {
   R.camOff = null;
 }
 
+/* ============================ THE BAY CROSSING ============================ */
+// On the coast a kicker across all three lanes throws you up into the open hold of a cargo plane flying low over the
+// road. Then you fly the plane out over the bay (A/D banks it between three flight lanes) with police helicopters on
+// your tail: dodge their rockets, and clip the ones that come alongside with your wingtip. Near the far shore a police
+// jet puts a missile into an engine, the ramp drops open and the car rolls out, falling back onto the road while the
+// plane goes down in the sea. x is distance along the road from the kicker's foot (p.s0). The plane group's origin is
+// the hold's sill (where the floor meets the rear ramp): local +z forward, +x the plane's left, y up from the floor.
+const SKY = { LANE: 56, HOLD: 9, FIGHT: 500, CALM: 800, STRIKE: 550, SPAN: 40.6, TAIL: -37, NOSE: 45, DOOR: .46 };
+
+function buildOcean(W, T, SEA) {
+  const p = (W.pieces || []).find(q => q.ocean); if (!p) return null;
+  const { main, root, kit, scene } = W, H = MAIN_HW, O = OCEAN, S = O.S, f = newFrame(), xc = O.RAMP + O.CATCH;
+  // which side of the road the sea is on
+  let sc = 0; for (let x = xc; x < O.FLY; x += 120) { frameAt(main, p.s0 + x, f); for (const sd of [-1, 1]) for (const d of [180, 300, 420]) if (T(f.pos.x + f.right.x * sd * d, f.pos.z + f.right.z * sd * d) < SEA + .5) sc += sd; }
+  const SD = sc >= 0 ? 1 : -1;
+  const ground = (x, z) => Math.max(SEA, T(x, z));
+
+  // ---------- the kicker: a steel ramp across the whole road, towers with floodlights, and a gantry sign ----------
+  { const g = kit.anchor(p.s0), wid = 2 * H - .4, std = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: .5, ...o });
+    kit.rampMesh(g, O.RAMP, O.RAMP_H, wid);
+    kit.box(wid + .4, 1, .6, kit.stripe, 0, O.RAMP_H - .5, O.RAMP + .3, g);
+    for (let x = -wid / 2 + 1.2; x < wid / 2 - .8; x += 2) { const l = new THREE.Mesh(new THREE.BoxGeometry(.9, .1, .12), kit.amber()); l.position.set(x, O.RAMP_H + .07, O.RAMP - .1); g.add(l); }
+    for (const x of [-wid / 2 + .8, -wid / 4, 0, wid / 4, wid / 2 - .8]) for (const z of [O.RAMP * .45, O.RAMP * .75, O.RAMP - .8]) { const h = O.RAMP_H * z / O.RAMP; kit.box(.35, h, .35, kit.darkSteel, x, h / 2, z, g); }
+    for (let k = 1; k <= 4; k++) for (const x of lanesFor(H)) { const c = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 3.6), new THREE.MeshBasicMaterial({ map: kit.chevTex, color: new THREE.Color(1.5, 1.5, 1.5), transparent: true, opacity: .9, polygonOffset: true, polygonOffsetFactor: -3, depthWrite: false })); c.rotation.x = -Math.PI / 2; c.position.set(-x, .05, -k * 9); g.add(c); }
+    for (const sx of [-1, 1]) { // light towers with wind socks
+      kit.box(.6, 16, .6, kit.steel, sx * (H + 2), 8, O.RAMP - 2, g); kit.box(3, .5, 1, kit.darkSteel, sx * (H + 1.2), 16, O.RAMP - 2, g);
+      const fl = kit.glow(new THREE.Color(3, 2.6, 2), 7); fl.position.set(sx * (H + .4), 16, O.RAMP - 2.6); g.add(fl);
+      const sock = new THREE.Mesh(new THREE.ConeGeometry(.5, 2.6, 10, 1, true).rotateZ(Math.PI / 2), std('#ff5a0a', { side: THREE.DoubleSide })); sock.position.set(sx * (H + 3.4), 14, O.RAMP - 2); g.add(sock);
+    }
+    const sign = (text, sub, w, h) => new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 1.4, 1.4), side: THREE.DoubleSide, map: canvasTex(768, 192, (c, cw, ch) => {
+      c.fillStyle = '#0b2a4a'; c.fillRect(0, 0, cw, ch); c.strokeStyle = '#ffc400'; c.lineWidth = 10; c.strokeRect(8, 8, cw - 16, ch - 16);
+      c.fillStyle = '#fff'; c.textAlign = 'center'; c.font = 'italic 900 78px "Saira Condensed", Impact, sans-serif'; c.fillText(text, cw / 2, 92);
+      c.fillStyle = '#ffc400'; c.font = '700 34px "Chakra Petch", sans-serif'; c.fillText(sub, cw / 2, 152); }) });
+    for (const [s, t, sb] of [[p.s0 - 420, 'BAY CROSSING', 'ALL LANES · 400 M · FULL THROTTLE'], [p.s0 - 30, 'NEXT STOP: THE SKY', 'NO WAY BACK']]) {
+      const gg = kit.anchor(s, true); for (const sx of [-1, 1]) kit.box(.5, 10, .5, kit.steel, sx * (H + 1.5), 5, 0, gg);
+      kit.box(2 * H + 3.5, .4, .4, kit.steel, 0, 9.6, 0, gg);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(16, 4), sign(t, sb)); m.position.set(0, 8, -.3); m.rotation.y = Math.PI; gg.add(m);
+    }
+  }
+
+  // ---------- the plane ----------
+  const PG = new THREE.Group(); PG.visible = false; root.add(PG);
+  const body = new THREE.Group(); body.scale.setScalar(S); PG.add(body);
+  const door = new THREE.Group(); // rear ramp: hinged at the sill, opens downwards
+  let loaded = false;
+  // the hold's lining, pre-lit (the sun never reaches in here): quilted walls with red webbing seats, lamp strips, a tread floor
+  const HW = 2.85, HH = 6.4, HZ = 19.6, basic = (map, col = 1) => new THREE.MeshBasicMaterial({ map, color: new THREE.Color(col, col, col), side: THREE.DoubleSide });
+  const wallTex = canvasTex(512, 256, (c, w, h) => {
+    const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#9aa08e'); gr.addColorStop(.55, '#6f7566'); gr.addColorStop(1, '#3d4238'); c.fillStyle = gr; c.fillRect(0, 0, w, h);
+    for (let x = 0; x < w; x += 32) { c.fillStyle = 'rgba(0,0,0,.28)'; c.fillRect(x, 0, 4, h); c.fillStyle = 'rgba(255,255,255,.08)'; c.fillRect(x + 4, 0, 3, h); }
+    for (let y = 18; y < h * .55; y += 26) { c.fillStyle = 'rgba(0,0,0,.14)'; c.fillRect(0, y, w, 2); }
+    c.fillStyle = '#8c1d1d'; c.fillRect(0, h * .62, w, h * .2); c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = 2; for (let x = 0; x < w; x += 10) { c.beginPath(); c.moveTo(x, h * .62); c.lineTo(x + 10, h * .82); c.stroke(); c.beginPath(); c.moveTo(x + 10, h * .62); c.lineTo(x, h * .82); c.stroke(); }
+    c.fillStyle = '#f2c200'; for (let x = 60; x < w; x += 128) c.fillRect(x, 0, 6, h * .62);
+  });
+  wallTex.wrapS = THREE.RepeatWrapping; wallTex.repeat.set(4, 1);
+  const ceilTex = canvasTex(256, 256, (c, w, h) => { c.fillStyle = '#5b6058'; c.fillRect(0, 0, w, h); for (let y = 0; y < h; y += 32) { c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(0, y, w, 5); } c.fillStyle = '#fff6dc'; for (const x of [w * .22, w * .74]) c.fillRect(x - 7, 0, 14, h); });
+  ceilTex.wrapT = THREE.RepeatWrapping; ceilTex.repeat.set(1, 3);
+  const floorTex = canvasTex(256, 256, (c, w, h) => { c.fillStyle = '#4a4e53'; c.fillRect(0, 0, w, h); for (let y = 0; y < h; y += 14) for (let x = (y / 14) % 2 * 7; x < w; x += 14) { c.fillStyle = 'rgba(255,255,255,.2)'; c.fillRect(x, y, 8, 3); } for (const x of [w * .18, w * .82]) { c.fillStyle = '#222'; c.fillRect(x - 10, 0, 20, h); c.fillStyle = '#9aa0a6'; for (let y = 0; y < h; y += 16) c.fillRect(x - 8, y, 16, 8); } c.fillStyle = '#f2c200'; c.fillRect(0, 0, 8, h); c.fillRect(w - 8, 0, 8, h); });
+  floorTex.wrapT = THREE.RepeatWrapping; floorTex.repeat.set(1, 4);
+  const hold = new THREE.Group(); PG.add(hold);
+  const plane = (w, h, mat, x, y, z, rx, ry) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); m.position.set(x, y, z); m.rotation.set(rx || 0, ry || 0, 0); hold.add(m); return m; };
+  plane(2 * HW, HZ, basic(floorTex, .95), 0, .04, HZ / 2, -Math.PI / 2);
+  for (const sx of [-1, 1]) plane(HZ, HH, basic(wallTex, 1), sx * HW, HH / 2, HZ / 2, 0, sx * Math.PI / 2);
+  plane(2 * HW, HZ, basic(ceilTex, 1.15), 0, HH, HZ / 2, Math.PI / 2);
+  plane(2 * HW, HH, basic(wallTex, .7), 0, HH / 2, HZ, 0, Math.PI);
+  const alarm = []; for (const z of [3, 10, 17]) { const m = new THREE.MeshBasicMaterial({ color: new THREE.Color(.3, .02, .02) }); const b = new THREE.Mesh(new THREE.SphereGeometry(.22, 10, 8), m); b.position.set(0, HH - .25, z); hold.add(b); alarm.push(m); }
+  { // cargo lashed at the front: pallets of crates under nets
+    const crate = new THREE.MeshBasicMaterial({ color: new THREE.Color(.95, .95, .95), map: canvasTex(128, 128, (c, w, h) => { c.fillStyle = '#9a7443'; c.fillRect(0, 0, w, h); for (let y = 0; y < h; y += 16) { c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(0, y, w, 2); } c.strokeStyle = 'rgba(40,20,0,.7)'; c.lineWidth = 6; c.strokeRect(3, 3, w - 6, h - 6); c.fillStyle = '#222'; c.font = '700 18px sans-serif'; c.fillText('APEX', 30, 70); }) });
+    for (const [x, y, z, s] of [[-1.3, .8, 17.6, 1.6], [1.2, .8, 17.8, 1.6], [-1.3, 2.4, 17.6, 1.6], [0, .7, 15.6, 1.4], [1.3, 2.3, 17.9, 1.5]]) { const b = new THREE.Mesh(new THREE.BoxGeometry(s * 1.4, s, s * 1.1), crate); b.position.set(x, y, z); hold.add(b); }
+    const strap = new THREE.MeshBasicMaterial({ color: '#d9a21b' }); for (const z of [15.6, 17.7]) { const b = new THREE.Mesh(new THREE.BoxGeometry(2 * HW - .2, .06, .14), strap); b.position.set(0, 3.25, z); hold.add(b); }
+  }
+  // the ramp's inner face, in the door group (model units, before the body scale)
+  const rampTop = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 16.4), basic(floorTex, .85)); rampTop.geometry.rotateX(-Math.PI / 2); rampTop.geometry.translate(0, .03, -8.2);
+  rampTop.rotation.x = Math.atan2(2.54, 16.2); door.add(rampTop);
+  const engL = new THREE.Vector3(9, 3.9, 6.5), engR = new THREE.Vector3(-9, 3.9, 6.5); // inner engines, model units
+  const toPG = v => v.clone().add(new THREE.Vector3(0, -1.62, 10.9)).multiplyScalar(S);
+  const ENG = toPG(SD > 0 ? engR : engL); // the engine on the sea side (the camera sits out there)
+  whenProp('c17', src => {
+    const mdl = src.clone(true); mdl.updateMatrixWorld(true);
+    const dd = mdl.getObjectByName('DropDoor'), dm = dd && (dd.isMesh ? dd : dd.children.find(c => c.isMesh));
+    if (dm) { const M = dm.matrixWorld.clone(); dm.parent.remove(dm); dm.matrixAutoUpdate = false; dm.matrix.copy(new THREE.Matrix4().makeTranslation(0, -1.62, 10.9).multiply(M)); door.add(dm); }
+    mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+    mdl.position.set(0, -1.62, 10.9); body.add(mdl);
+    door.position.set(0, 0, 0); body.add(door); // the door group pivots at the sill (the body's origin after the offset)
+    loaded = true;
+  });
+
+  // ---------- helicopters, rockets, the police jet and its missile ----------
+  const helis = [0, 1, 2, 3].map(() => { const g = makeHeli(); g.scale.setScalar(2.6); const r = kit.glow(new THREE.Color(6, .3, .2), 4), b = kit.glow(new THREE.Color(.3, .7, 7), 4); r.position.set(-1.6, -.4, .3); b.position.set(1.6, -.4, .3); g.userData.body.add(r, b); g.userData.rl = r; g.userData.bl = b; g.visible = false; root.add(g); return { g, on: false }; });
+  const laserMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(5, .15, .1), transparent: true, opacity: .8, blending: THREE.AdditiveBlending, depthWrite: false });
+  const laser = new THREE.Mesh(new THREE.CylinderGeometry(.12, .12, 1, 6, 1, true), laserMat); laser.visible = false; root.add(laser);
+  const mkRocket = (scale) => { const g = new THREE.Group(); const b = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, 2.6, 10).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#d8dade', roughness: .4, metalness: .5 })); g.add(b);
+    const n = new THREE.Mesh(new THREE.ConeGeometry(.22, .7, 10).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#b3261e' })); n.position.z = 1.65; g.add(n);
+    const fl = kit.glow(new THREE.Color(5, 2.4, .8), 3); fl.position.z = -1.6; g.add(fl); g.scale.setScalar(scale); g.visible = false; root.add(g); return g; };
+  const rockets = [0, 1, 2, 3, 4, 5].map(() => ({ g: mkRocket(1.6), on: false }));
+  const jet = (() => { // a police interceptor: navy, a white stripe, red and blue strobes
+    const g = new THREE.Group(), navy = new THREE.MeshPhysicalMaterial({ color: '#0e2552', metalness: .5, roughness: .35, clearcoat: .6 }), white = new THREE.MeshStandardMaterial({ color: '#e8eaee', roughness: .4 });
+    const bd = new THREE.Mesh(new THREE.CylinderGeometry(.9, .7, 14, 12).rotateX(Math.PI / 2), navy); g.add(bd);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(.9, 4, 12).rotateX(Math.PI / 2), navy); nose.position.z = 9; g.add(nose);
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(.92, .72, 5, 12, 1, true).rotateX(Math.PI / 2), white); st.position.z = 1; g.add(st);
+    const wing = new THREE.Mesh(new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(0, 4), new THREE.Vector2(6.5, -3), new THREE.Vector2(-6.5, -3)]), { depth: .25, bevelEnabled: false }).rotateX(Math.PI / 2), navy); g.add(wing);
+    for (const sx of [-1, 1]) { const fin = new THREE.Mesh(new THREE.BoxGeometry(.2, 3, 3), navy); fin.position.set(sx * 1.2, 1.8, -5.5); fin.rotation.z = sx * .35; g.add(fin); }
+    const can = new THREE.Mesh(new THREE.SphereGeometry(.8, 10, 6), MAT.glass); can.scale.set(1, .8, 2.4); can.position.set(0, .8, 4.5); g.add(can);
+    const ab = kit.glow(new THREE.Color(4, 1.8, .6), 5); ab.position.z = -7.5; g.add(ab);
+    const r = kit.glow(new THREE.Color(6, .2, .1), 2.5), b = kit.glow(new THREE.Color(.2, .6, 7), 2.5); r.position.set(6.3, 0, -2.8); b.position.set(-6.3, 0, -2.8); g.add(r, b);
+    g.userData = { r, b }; g.scale.setScalar(1.8); g.visible = false; root.add(g); return g; })();
+  const missile = mkRocket(2.2);
+  // our own smoke and fire (the world's pools are sized for tyre smoke)
+  const fire = new Particles(700, true, glowTex), smoke = new Particles(900, false, smokeTex); scene.add(fire.points, smoke.points);
+  const boom = (v, k = 1, splash = false) => {
+    for (let i = 0; i < 60 * k; i++) fire.spawn(v.x, v.y, v.z, rand(-14, 14) * k, rand(-6, 16) * k, rand(-14, 14) * k, 4, rand(1.2, 2.4), .35, rand(3, 7) * k, rand(.5, 1.1), 4 * k, 1.5, 2);
+    for (let i = 0; i < 40 * k; i++) smoke.spawn(v.x, v.y, v.z, rand(-8, 8) * k, rand(0, 9) * k, rand(-8, 8) * k, .14, .13, .13, rand(5, 9) * k, rand(2, 3.5), 6 * k, 1.2, -.5);
+    if (splash) for (let i = 0; i < 70 * k; i++) smoke.spawn(v.x, v.y, v.z, rand(-10, 10) * k, rand(10, 34) * k, rand(-10, 10) * k, .95, .97, 1, rand(3, 6) * k, rand(1.2, 2.2), 5 * k, .4, 22);
+  };
+
+  // ---------- the flight path ----------
+  // approach: [x, lead of the sill over the car, offset towards the sea, height over the road]
+  const AK = [[-560, -210, 90, 72], [-330, -30, 20, 36], [-170, 70, 0, 22], [-40, 28, 0, 15], [xc, 0, 0, O.HC]];
+  // flight: [x, offset towards the sea, height over the road]
+  const FK = [[xc, 0, O.HC], [xc + 250, 60, 50], [xc + 550, 230, 105], [O.FLY - SKY.CALM, 230, 105], [O.FLY - SKY.STRIKE, 110, 70], [O.FLY, 0, O.DROP_H]];
+  const key = (K, x, i) => { if (x <= K[0][0]) return K[0][i]; for (let k = 1; k < K.length; k++) if (x < K[k][0]) return lerp(K[k - 1][i], K[k][i], smooth(K[k - 1][0], K[k][0], x)); return K[K.length - 1][i]; };
+  const wob = x => smooth(xc + 550, xc + 800, x) * (1 - smooth(O.FLY - SKY.CALM - 200, O.FLY - SKY.CALM, x));
+  let st = null;
+  const offAlt = x => { if (st && st.dive) return [lerp(st.dive.off0, 0, st.dive.ko), lerp(st.dive.alt0, O.DROP_H + 3, st.dive.ka)];
+    const w = wob(x); return [key(FK, x, 1) + w * 34 * Math.sin(x / 270), key(FK, x, 2) + w * 9 * Math.sin(x / 190)]; };
+  function pathPos(x, lo, dy, out) { // a point in the flight corridor: lo metres across (road right), dy above the plane's height
+    frameAt(main, p.s0 + x, f); const [off, alt] = offAlt(x);
+    return out.copy(f.pos).addScaledVector(f.right, SD * off + lo).setY(f.pos.y + alt + dy);
+  }
+  function approachPos(x, out) { frameAt(main, p.s0 + x + key(AK, x, 1), f); return out.copy(f.pos).addScaledVector(f.right, SD * key(AK, x, 2)).setY(f.pos.y + key(AK, x, 3)); }
+
+  const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _l = new THREE.Vector3(), _u = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0), ZAX = new THREE.Vector3(0, 0, 1);
+  // point the plane along its motion, rolled into turns
+  function orient(pos, dt, extraRoll = 0, extraPitch = 0) {
+    if (!st.prev) { frameAt(main, race.player.s, f); st.fwd.copy(f.fwd); st.prev = pos.clone(); st.yaw = Math.atan2(f.fwd.x, f.fwd.z); }
+    if (dt > 0) { _v.copy(pos).sub(st.prev); const d = _v.length(); if (d > 1e-3) { st.vel.copy(_v).multiplyScalar(1 / dt); st.fwd.lerp(_v.multiplyScalar(1 / d), 1 - Math.exp(-dt * 9)).normalize(); } }
+    st.prev.copy(pos);
+    const yaw = Math.atan2(st.fwd.x, st.fwd.z); let dy = yaw - st.yaw; if (dy > Math.PI) dy -= 2 * Math.PI; if (dy < -Math.PI) dy += 2 * Math.PI; st.yaw = yaw;
+    const want = clamp(dt > 0 ? -dy / dt * 1.6 : 0, -.75, .75) + extraRoll; st.roll = lerp(st.roll, want, 1 - Math.exp(-dt * 3));
+    _l.crossVectors(UP, st.fwd).normalize(); _u.crossVectors(st.fwd, _l).normalize(); _m.makeBasis(_l, _u, st.fwd);
+    PG.position.copy(pos); PG.quaternion.setFromRotationMatrix(_m).multiply(_q.setFromAxisAngle(ZAX, st.roll)).multiply(_q.setFromAxisAngle(_l.set(1, 0, 0), extraPitch));
+    PG.updateMatrixWorld(true);
+  }
+  const hudEl = () => $('skyHud');
+  function setHud(on, text, lock) { const el = hudEl(); if (!el) return; el.className = on ? (lock ? 'on lock' : 'on') : ''; if (text !== undefined) el.querySelector('b').textContent = text; }
+
+  function reset() {
+    p.segs = p.base.segs.slice(); p.sEnd = p.base.sEnd;
+    st = { ph: 'idle', fwd: new THREE.Vector3(0, 0, 1), vel: new THREE.Vector3(), prev: null, yaw: 0, roll: 0, door: 0, zCar: 0, lane: 0, lo: 0, lv: 0, dmg: 0, smokers: [], fightT: 0, spawnI: 0, kills: 0, lockT: 0 };
+    PG.visible = false; jet.visible = missile.visible = laser.visible = false; for (const h of helis) { h.on = false; h.g.visible = false; } for (const r of rockets) { r.on = false; r.g.visible = false; }
+    for (const m of alarm) m.color.setRGB(.3, .02, .02); setHud(false);
+  }
+  reset();
+  const ready = () => loaded && st && st.ph === 'appr' && race.cine && race.cine.type === 'ocean';
+
+  // ---------- helicopters ----------
+  const SPAWNS = [[.2, 'shoot'], [1.8, 'flank'], [5, 'shoot'], [6.4, 'flank'], [8.8, 'shoot'], [9.8, 'flank']];
+  function spawnHeli(role) {
+    const h = helis.find(q => !q.on); if (!h) return;
+    const lanes = [-1, 0, 1].filter(l => l !== st.lane);
+    Object.assign(h, { on: true, role, dz: -300, lane: role === 'flank' ? lanes[Math.random() < .5 ? 0 : lanes.length - 1] : lanes[(Math.random() * lanes.length) | 0], lo: 0, dy: role === 'flank' ? 1 : 3, st: 'in', t: 0, shots: 0, dead: null, pos: new THREE.Vector3() });
+    h.lo = h.lane * SKY.LANE + rand(-30, 30); h.g.visible = true; h.g.userData.body.rotation.set(.12, 0, 0);
+    Sound.blip(260, .3, 'sawtooth', .06);
+  }
+  function killHeli(h, why) {
+    h.st = 'dead'; h.dead = { vel: st.vel.clone().multiplyScalar(.7).add(new THREE.Vector3(rand(-8, 8), rand(2, 8), rand(-8, 8))), spin: rand(4, 7) * (Math.random() < .5 ? -1 : 1), t: 0 };
+    boom(h.pos, 1.1); R().flash = Math.max(R().flash, .6); R().shake = Math.max(R().shake, .8); Sound.hit(1, 90); Sound.blip(120, .5, 'sawtooth', .12);
+    const P = R().player; P.nitro = Math.min(1, P.nitro + .2); st.kills++;
+    pop(why === 'clip' ? 'Clipped it with the wing!' : 'Friendly fire!', 'var(--hot)', 'helicopter down · +20% nitro');
+    const C = R().cine; if (C && C.type === 'ocean') { C.kill = { h, t0: C.t }; }
+  }
+  const R = () => race;
+  function updateHelis(dt, x, fight) {
+    const P = R().player, T0 = performance.now() / 1000;
+    let locking = false;
+    for (const h of helis) {
+      if (!h.on) continue;
+      const ud = h.g.userData; ud.rotor.rotation.y += dt * 40; ud.tail.rotation.x += dt * 60; const blink = T0 % .6; ud.rl.visible = blink < .15; ud.bl.visible = blink > .3 && blink < .45;
+      if (h.st === 'dead') { // spinning down into the sea, trailing smoke
+        const D = h.dead; D.t += dt; D.vel.y -= 16 * dt; h.pos.addScaledVector(D.vel, dt); h.g.position.copy(h.pos); h.g.rotation.y += D.spin * dt; ud.body.rotation.z += dt * .8;
+        if (Math.random() < .8) { smoke.spawn(h.pos.x, h.pos.y, h.pos.z, rand(-2, 2), rand(1, 3), rand(-2, 2), .1, .1, .1, rand(4, 7), 2.4, 5, .5, -.3); fire.spawn(h.pos.x, h.pos.y, h.pos.z, rand(-3, 3), rand(-2, 3), rand(-3, 3), 4, 1.6, .3, rand(2, 4), .5, 2); }
+        if (h.pos.y < ground(h.pos.x, h.pos.z) + 1 || D.t > 9) { boom(h.pos, 1.2, h.pos.y < SEA + 3); h.on = false; h.g.visible = false; }
+        continue;
+      }
+      h.t += dt;
+      if (h.st === 'in') { const tgt = h.role === 'flank' ? 4 : -58; h.dz = approach(h.dz, tgt, (h.role === 'flank' ? 34 : 40) * dt); if (Math.abs(h.dz - tgt) < 1) { h.st = 'hold'; h.t = 0; } }
+      if (!fight && h.st !== 'out') { h.st = 'out'; h.t = 0; }
+      if (h.role === 'flank' && h.st !== 'out') { // keep to the lane beside you, and give up after a while
+        const want = [-1, 0, 1].filter(l => Math.abs(l - st.lane) === 1); if (!want.includes(h.lane)) h.lane = want.sort((a, b) => Math.abs(a * SKY.LANE - h.lo) - Math.abs(b * SKY.LANE - h.lo))[0];
+        if (h.st === 'hold' && h.t > 5.5) { h.st = 'out'; h.t = 0; }
+      }
+      if (h.role === 'shoot' && h.st === 'hold' && h.t > .7) { if (h.shots >= 3) { h.st = 'out'; h.t = 0; } else { h.st = 'lock'; h.t = 0; h.lockLane = st.lane; } }
+      if (h.st === 'lock') { h.lockLane = st.lane; locking = true; if (h.t > 1.35) fireRocket(h); }
+      if (h.st === 'cool' && h.t > 1.4) { h.st = 'hold'; h.t = 0; const opts = [-1, 0, 1].filter(l => l !== h.lane); h.lane = opts[(Math.random() * 2) | 0]; }
+      if (h.st === 'out') { h.dz -= 30 * dt; h.dy -= 6 * dt; if (h.t > 5) { h.on = false; h.g.visible = false; continue; } }
+      h.lo = approach(h.lo, h.lane * SKY.LANE, 26 * dt);
+      pathPos(x + h.dz, h.lo, h.dy + Math.sin(h.t * 1.3) * 1.2, h.pos); h.g.position.copy(h.pos);
+      h.g.lookAt(_w.copy(h.pos).add(st.fwd)); ud.body.rotation.x = .14; ud.body.rotation.z = clamp((h.lane * SKY.LANE - h.lo) * -.01, -.35, .35);
+      // swing the plane into one alongside and the wingtip takes its rotor off
+      if (h.st !== 'out' && Math.abs(h.dz) < 26 && Math.abs(st.lo - h.lo) < SKY.SPAN + 3) killHeli(h, 'clip');
+    }
+    // the lock-on: a red laser from the shooter to the plane, and a warning
+    const lk = helis.find(h => h.on && h.st === 'lock');
+    if (lk) { _v.copy(lk.pos); _v.y -= 1; _w.copy(PG.position).addScaledVector(st.fwd, -10); const d = _w.sub(_v), len = d.length(); laser.position.copy(_v).addScaledVector(d, .5); laser.scale.set(1, len, 1); laser.quaternion.setFromUnitVectors(UP, d.normalize()); laser.visible = Math.floor(lk.t * 10) % 2 === 0;
+      st.lockT -= dt; if (st.lockT <= 0) { st.lockT = .22; Sound.blip(1320, .08, 'square', .07); } }
+    else laser.visible = false;
+    return locking;
+  }
+  function fireRocket(h) {
+    h.st = 'cool'; h.t = 0; h.shots++;
+    const r = rockets.find(q => !q.on); if (!r) return;
+    Object.assign(r, { on: true, hitDone: false, dz: h.dz + 4, lo: h.lockLane * SKY.LANE, dy: h.dy - 1, t: 0, pos: new THREE.Vector3() }); r.g.visible = true;
+    Sound.whoosh(.45, .5);
+  }
+  function updateRockets(dt, x) {
+    const Rr = R();
+    for (const r of rockets) {
+      if (!r.on) continue;
+      r.t += dt; r.dz += 95 * dt; r.dy = lerp(r.dy, 0, 1 - Math.exp(-dt * 2));
+      pathPos(x + r.dz, r.lo, r.dy, r.pos); r.g.position.copy(r.pos); r.g.lookAt(_w.copy(r.pos).add(st.fwd));
+      smoke.spawn(r.pos.x, r.pos.y, r.pos.z, rand(-.5, .5), rand(-.5, .5), rand(-.5, .5), .75, .74, .72, 2.2, 1.6, 3.5, .8);
+      if (!r.hitDone && r.dz > SKY.TAIL + 6 && r.dz < SKY.NOSE) { // at the plane
+        r.hitDone = true;
+        if (Math.abs(r.lo - st.lo) < 16) { // hit: the tail takes it
+          r.on = false; r.g.visible = false; boom(r.pos, .8); st.dmg++; st.smokers.push(new THREE.Vector3(rand(-3, 3), rand(2, 5), rand(-20, -8)));
+          Rr.shake = Math.max(Rr.shake, 1); Rr.flash = Math.max(Rr.flash, .5); Sound.hit(1, 140); const P = Rr.player; P.nitro = Math.max(0, P.nitro - .1);
+          pop('Rocket hit!', 'var(--hot)', 'smoke pouring off the tail'); continue;
+        }
+        pop('Rocket dodged', '#fff', '+10% nitro'); Rr.player.nitro = Math.min(1, Rr.player.nitro + .1);
+      }
+      for (const h of helis) if (h.on && h.st !== 'dead' && Math.abs(h.dz - r.dz) < 9 && Math.abs(h.lo - r.lo) < 11 && r.t > .4) { r.on = false; r.g.visible = false; killHeli(h, 'friendly'); break; }
+      if (r.on && (r.dz > 320 || r.t > 6)) { boom(r.pos, .4); r.on = false; r.g.visible = false; }
+    }
+  }
+
+  // ---------- the film ----------
+  function startFilm() {
+    const Rr = R(); if (Rr.cine) endCine();
+    st.ph = 'appr'; st.prev = null; PG.visible = true; st.door = 0;
+    Rr.cine = { type: 'ocean', t: 0, dur: 1e9, shot: 'flyover', shotT: 0, tsv: 1 };
+    $('cineLabel').innerHTML = '';
+    $('movieTitle').innerHTML = '<b>The Bay Crossing</b><small>Highway One · a cargo plane is waiting for you</small>';
+    $('hud').classList.add('cine', 'movie'); Sound.whoosh(.5, 2);
+    // traffic between you and the kicker moves on
+    const P = Rr.player, L = main.L; for (const t of Rr.world.traffic) { if (t.knock > 0) continue; const ds = ((t.s - P.s) % L + L) % L; if (ds < 700) { t.s = (p.base.sEnd + 300 + rand(0, 300)) % L; t.cv = t.v; } }
+  }
+  function endFilm(keep) {
+    const Rr = R(); setHud(false); laser.visible = false;
+    if (Rr.cine && Rr.cine.type === 'ocean') { Rr.camOff = camera.position.clone().sub(Rr.player.mesh.position); endCine(); }
+    if (!keep) { PG.visible = false; for (const h of helis) { h.on = false; h.g.visible = false; } }
+  }
+  function shot(C, name) { if (C.shot !== name) { C.shot = name; C.shotT = C.t; C.side = Math.random() < .5 ? -1 : 1; C.cam = null; } }
+  function startJump() { // your car is on the kicker
+    const Rr = R(), P = Rr.player; st.ph = 'air'; P.lane = 1; if (Rr.cine) shot(Rr.cine, 'ramp');
+    const tag = $('laneTag'); tag.textContent = 'Catch the plane'; tag.className = ''; void tag.offsetWidth; tag.className = 'show';
+    Sound.whoosh(.6, 1.2);
+  }
+
+  // before the racers move: the story, the plane's controls, the helicopters
+  function step(dt, Rr) {
+    const P = Rr.player, C = Rr.cine && Rr.cine.type === 'ocean' ? Rr.cine : null, L = main.L;
+    let x = (P.route < 0 ? P.s : mainEq(P)) - p.s0; if (x < -L / 2) x += L; if (x > L / 2) x -= L;
+    fire.update(dt); smoke.update(dt);
+    if (st.ph === 'idle') {
+      const free = Rr.state === 'race' && !Rr.ride && P.wreck <= 0 && !Rr.finale && !P.jump && (!Rr.cine || Rr.cine.type === 'lane');
+      if (loaded && free && x > -600 && x < -330) startFilm();
+      return;
+    }
+    if (st.ph === 'done' || st.ph === 'gone') { if (st.plane) planeCrash(dt); if (helis.some(h => h.on)) updateHelis(dt, x, false); return; }
+    if (!C && st.ph !== 'land') { st.ph = st.ph === 'appr' ? 'gone' : st.ph; if (st.ph === 'gone') { PG.visible = false; return; } }
+    if (st.ph === 'appr' && (Rr.state !== 'race' || P.wreck > 0 || x > O.RAMP)) { endFilm(); st.ph = 'gone'; return; }
+    if (st.ph === 'appr') { shot(C, x < -330 ? 'flyover' : x < -60 ? 'follow' : 'ramp'); if (x > -120) P.lane = 1; }
+    if (st.ph === 'air') { const lip = O.RAMP; shot(C, x < lip ? 'ramp' : x < lip + 26 ? 'rise' : 'inhold'); if (P.jump && P.jump.p === p && P.jump.i >= 2) { st.ph = 'hold'; st.catchT = C.t; shot(C, 'skid'); Sound.hit(1, 300); Rr.shake = 1; } }
+    if (st.ph === 'hold') {
+      const u = C.t - st.catchT; st.zCar = SKY.HOLD * (1 - Math.pow(1 - clamp(u / 1.2, 0, 1), 3));
+      if (u < 1.1 && Math.random() < .9) { _v.set(rand(-.8, .8), .2, st.zCar - 1.6); PG.localToWorld(_v); Rr.world.sparks.spawn(_v.x, _v.y, _v.z, rand(-3, 3), rand(1, 4), rand(-3, 3), 4, 2.2, .7, .3, rand(.2, .5), -.2, 1.2, 12); }
+      if (u > 1.5 && C.shot === 'skid') { shot(C, 'climb'); $('movieTitle').innerHTML = '<b>Now fly it</b><small>Police helicopters inbound over the bay</small>'; const hud = $('hud'); hud.classList.remove('movie'); void hud.offsetWidth; hud.classList.add('movie'); }
+      if (u > 4.4) { st.ph = 'fly'; shot(C, 'fly'); $('hud').classList.remove('cine', 'movie'); st.fightT = 0; st.spawnI = 0; st.hintT = 0;
+        setHud(true, touchCapable ? 'Swipe to bank · dodge the rockets · clip helicopters with your wing' : 'A / D to bank · dodge the rockets · clip helicopters with your wing'); }
+    }
+    if (st.ph === 'fly') {
+      const fight = x > xc + SKY.FIGHT && x < O.FLY - SKY.CALM;
+      if (input.laneTap) { const nl = clamp(st.lane + Math.sign(input.laneTap), -1, 1); input.laneTap = 0; if (nl !== st.lane) { st.lane = nl; Sound.whoosh(.35, .6); } }
+      if (fight) { st.fightT += dt; while (st.spawnI < SPAWNS.length && st.fightT > SPAWNS[st.spawnI][0]) spawnHeli(SPAWNS[st.spawnI++][1]); }
+      const locking = updateHelis(dt, x, fight); updateRockets(dt, x);
+      st.hintT += dt; const n = helis.filter(h => h.on && h.st !== 'dead').length;
+      setHud(true, st.hintT < 6 ? undefined : fight ? `Police helicopters ${n ? '· ' + n + ' on you' : 'regrouping'} · ${st.kills} down` : x > O.FLY - SKY.CALM ? 'The far shore is ahead' : 'Climbing out over the bay', locking);
+      if (locking && !st.warned) { st.warned = 1; pop('Missile lock', '#ff3b30', 'change lanes!'); } if (!locking) st.warned = 0;
+      if (C.kill && C.t - C.kill.t0 > 1.3) C.kill = null;
+      if (x > O.FLY - SKY.STRIKE && !C.kill) { // the jet
+        st.ph = 'strike'; st.sT0 = C.t; st.lane = 0; const [o, a] = offAlt(x); st.dive = { off0: o, alt0: a, ko: 0, ka: 0 }; st.jetFired = st.impact = false;
+        setHud(false); laser.visible = false; for (const r of rockets) { r.on = false; r.g.visible = false; }
+        $('movieTitle').innerHTML = '<b>Interceptor</b><small>A police jet on your six</small>'; const hud = $('hud'); hud.classList.add('cine', 'movie');
+        shot(C, 'jet'); jet.visible = true; Sound.whoosh(.8, 1.8);
+      }
+    }
+    if (st.ph === 'fly' || st.ph === 'strike') st.lo = approach(st.lo, st.lane * SKY.LANE, dt * (40 + Math.abs(st.lane * SKY.LANE - st.lo) * 1.2)), st.lv = lerp(st.lv, (st.lane * SKY.LANE - st.lo), 1 - Math.exp(-dt * 4));
+    if (st.ph === 'strike') {
+      const t = C.t - st.sT0; st.dive.ko = smooth(1.2, 6.2, t); st.dive.ka = smooth(.8, 6.2, t);
+      updateHelis(dt, x, false);
+      shot(C, t < 1.8 ? 'jet' : t < 2.85 ? 'missile' : t < 4.4 ? 'impact' : 'cabin');
+      if (t > 1.25 && !st.jetFired) { st.jetFired = true; missile.visible = true; st.mT0 = t; Sound.whoosh(.7, .7); }
+      if (t > 2.85 && !st.impact) { st.impact = true; missile.visible = false; _v.copy(ENG); PG.localToWorld(_v); boom(_v, 1.6); Rr.flash = 1; Rr.shake = 1.4; Sound.hit(1, 70); Sound.blip(90, .9, 'sawtooth', .15); st.smokers.push(ENG.clone(), ENG.clone().add(new THREE.Vector3(0, 0, -6)));
+        const tag = $('laneTag'); tag.textContent = 'Engine two is on fire'; tag.className = ''; void tag.offsetWidth; tag.className = 'show'; }
+      if (t > 4.4) { const on = Math.floor(C.t * 4) % 2 === 0; for (const m of alarm) m.color.setRGB(on ? 6 : .3, on ? .2 : .02, on ? .1 : .02); if (on !== st.alOn) { st.alOn = on; if (on) Sound.blip(740, .18, 'square', .09); } }
+      if (t > 6.1) { st.ph = 'slide'; st.slideT0 = C.t; st.lead = 0; shot(C, 'drop'); const tag = $('laneTag'); tag.textContent = 'Bail out'; tag.className = ''; void tag.offsetWidth; tag.className = 'show'; Sound.whoosh(.8, 1.4); }
+    }
+    if (st.ph === 'slide') { // the nose comes up and the car rolls back down the open ramp
+      const u = C.t - st.slideT0; st.zCar = SKY.HOLD - 34 * Math.pow(clamp(u / 1.3, 0, 1), 1.6);
+      if (st.zCar < -21) { // off the end of the ramp: from here the car falls along the road, back onto it
+        st.ph = 'fall'; const hNow = P.mesh.position.y - frameAt(main, P.s, f).pos.y; const L2 = Math.max(60, P.v * Math.sqrt(2 * Math.max(4, hNow) / 22));
+        p.segs = [p.segs[0], p.segs[1], linSeg(p.sc, O.HC, P.s, O.HC), arcSeg(P.s, Math.max(4, hNow), P.s + L2, 0, Math.max(4, hNow) + .5)]; p.sEnd = P.s + L2;
+        st.fall = { pos: P.mesh.position.clone(), q: P.mesh.quaternion.clone(), s0: P.s, len: L2 }; P.d = 0; P.lane = 1;
+        st.plane = { vel: st.vel.clone().addScaledVector(st.fwd, 18), roll: st.roll, pitch: .18, t: 0 };
+        shot(C, 'fall');
+      }
+    }
+    if (st.ph === 'fall' || st.ph === 'land') planeCrash(dt);
+    if ((st.ph === 'slide' || st.ph === 'fall' || st.ph === 'land') && helis.some(h => h.on)) updateHelis(dt, x, false);
+    if (st.ph === 'fall' && !P.jump) { // touched down
+      st.ph = 'land'; st.landT = C ? C.t : 0; if (C) shot(C, 'land');
+      const el = $('bioTitle'); el.innerHTML = '<small class="st">Border crossed · the police lost you over the sea</small><b>Welcome to Solara</b><small class="sb">The far shore of the bay</small>'; el.className = ''; void el.offsetWidth; el.className = 'show';
+    }
+    if (st.ph === 'land' && (!C || C.t - st.landT > 1.4)) { endFilm(true); st.ph = 'done'; }
+    // smoke and fire off the damaged plane
+    if (PG.visible && !st.plane) for (const sp of st.smokers) { _v.copy(sp); PG.localToWorld(_v); smoke.spawn(_v.x, _v.y, _v.z, rand(-1, 1), rand(0, 2), rand(-1, 1), .12, .12, .12, rand(4, 7), 2.4, 6, .3, -.4); if (st.impact) fire.spawn(_v.x, _v.y, _v.z, rand(-2, 2), rand(-1, 2), rand(-2, 2), 4, 1.5, .3, rand(2.5, 4.5), .45, 3); }
+  }
+  // the plane on its own after the drop: rolling over and down into the sea
+  function planeCrash(dt) {
+    const pl = st.plane; if (!pl || !PG.visible) return;
+    pl.t += dt; pl.vel.y -= 7 * dt; frameAt(main, race.player.s, f); pl.vel.addScaledVector(f.right, SD * 14 * dt);
+    const pos = _w.copy(PG.position).addScaledVector(pl.vel, dt);
+    pl.roll += dt * .5 * SD; pl.pitch = lerp(pl.pitch, -.45, 1 - Math.exp(-dt * .8));
+    st.fwd.copy(pl.vel).normalize(); _l.crossVectors(UP, st.fwd).normalize(); _u.crossVectors(st.fwd, _l).normalize(); _m.makeBasis(_l, _u, st.fwd);
+    PG.position.copy(pos); PG.quaternion.setFromRotationMatrix(_m).multiply(_q.setFromAxisAngle(ZAX, pl.roll)); PG.updateMatrixWorld(true);
+    for (const sp of st.smokers) { _v.copy(sp); PG.localToWorld(_v); smoke.spawn(_v.x, _v.y, _v.z, rand(-1, 1), rand(0, 2), rand(-1, 1), .1, .1, .1, rand(6, 9), 3, 7, .3, -.4); fire.spawn(_v.x, _v.y, _v.z, rand(-3, 3), rand(-1, 3), rand(-3, 3), 4, 1.5, .3, rand(4, 7), .5, 4); }
+    const gy = ground(pos.x, pos.z);
+    if (pos.y < gy + 4 || pl.t > 14) { boom(pos, 3, gy <= SEA + .01); _v.copy(pos).addScaledVector(pl.vel, .3); boom(_v, 2.4, gy <= SEA + .01); race.shake = Math.max(race.shake, .6); Sound.hit(1, 60); PG.visible = false; st.plane = null; }
+  }
+  // after the racers have moved: put the car in the hold (or blend it out of it) and the plane in the sky
+  function pose(dt, Rr) {
+    if (!st || st.ph === 'idle' || st.ph === 'gone' || st.ph === 'done' || !PG.visible && !st.fall) return;
+    const P = Rr.player, C = Rr.cine; let x = P.s - p.s0; if (x < -main.L / 2) x += main.L;
+    const ud = P.mesh.userData, model = ud.model;
+    if (st.ph === 'appr' || st.ph === 'air') {
+      approachPos(Math.min(x, xc), _w); orient(_w, dt, 0, 0);
+      st.door = approach(st.door, x > -150 ? 1 : 0, dt * .6);
+    } else if (st.ph === 'hold' || st.ph === 'fly' || st.ph === 'strike' || st.ph === 'slide') {
+      let pitch = 0, shake = 0;
+      if (st.ph === 'hold') st.door = approach(st.door, 0, dt * .5);
+      if (st.ph === 'strike') { const t = C ? C.t - st.sT0 : 0; if (st.impact) { shake = .015; pitch = -.05; } st.door = approach(st.door, t > 4.6 ? 1 : 0, dt * .7); }
+      if (st.ph === 'slide') { const u = C ? C.t - st.slideT0 : 0; pitch = -.2 * smooth(0, .6, u); st.lead = SKY.HOLD - st.zCar; st.door = 1; shake = .01; }
+      pathPos(x + (st.lead || 0), st.lo, 0, _w); orient(_w, dt, st.lv * .006 + (shake ? rand(-shake, shake) * 3 : 0), pitch + (shake ? rand(-shake, shake) : 0));
+      // the car: sitting in the hold (or rolling back down the ramp)
+      const z = st.ph === 'fly' || st.ph === 'strike' ? SKY.HOLD : st.zCar;
+      const onRamp = z < 0 ? z * Math.tan(SKY.DOOR - .155) : 0;
+      _v.set(0, onRamp, z); PG.localToWorld(_v); P.mesh.position.copy(_v); P.mesh.quaternion.copy(PG.quaternion);
+      if (z < 0) P.mesh.quaternion.multiply(_q.setFromAxisAngle(_l.set(1, 0, 0), SKY.DOOR - .155));
+      model.position.y = st.ph === 'strike' && st.impact ? Math.abs(Math.sin(C.t * 23)) * .08 : 0; model.rotation.set(0, 0, st.ph === 'strike' && st.impact ? Math.sin(C.t * 17) * .03 : 0);
+      P.nitroOn = false; P.boostLvl = 0; P.drifting = false; P.v = approach(P.v, P.vmax * .95, dt * 10);
+    } else if (st.ph === 'fall' && st.fall) { // blend from where the car left the ramp onto its fall along the road
+      const q = pieceAt(p, P.s), u = q ? clamp((P.s - st.fall.s0) / st.fall.len, 0, 1) : 1, k = 1 - smooth(0, .7, u);
+      if (!st.fall.off) { st.fall.off = st.fall.pos.clone().sub(P.mesh.position); st.fall.qa = st.fall.q.clone(); }
+      P.mesh.position.addScaledVector(st.fall.off, k); P.mesh.quaternion.slerp(st.fall.qa, k);
+      model.rotation.x += -.25 * Math.sin(Math.PI * u); P.nitroOn = false; P.drifting = false;
+    }
+    door.rotation.x = -SKY.DOOR * smooth(0, 1, st.door);
+    // the jet and its missile, in the plane's own frame
+    if (st.ph === 'strike' && C) {
+      const t = C.t - st.sT0;
+      _v.set(-SD * 26, 16 + Math.max(0, t - 1.6) * 30, -380 + t * 170 + Math.max(0, t - 1.6) * 150); PG.localToWorld(_v); jet.position.copy(_v);
+      jet.quaternion.copy(PG.quaternion).multiply(_q.setFromAxisAngle(_l.set(1, 0, 0), -.35 * smooth(1.4, 2.2, t)));
+      const bl = (performance.now() / 1000) % .5; jet.userData.r.visible = bl < .12; jet.userData.b.visible = bl > .25 && bl < .37;
+      if (t > 3.8) jet.visible = false;
+      if (st.jetFired && !st.impact) {
+        const u = clamp((t - st.mT0) / (2.85 - st.mT0), 0, 1), a = _u.set(-SD * 26, 14, -380 + st.mT0 * 170); PG.localToWorld(a);
+        const b = _v.copy(ENG); PG.localToWorld(b); const mp = _w.copy(a).lerp(b, u * u * (1.4 - .4 * u)); mp.y += Math.sin(Math.PI * u) * 4;
+        missile.lookAt(b); missile.position.copy(mp); missile.lookAt(b);
+        smoke.spawn(mp.x, mp.y, mp.z, rand(-.5, .5), rand(-.5, .5), rand(-.5, .5), .8, .78, .75, 2.4, 2.2, 3, .6);
+      }
+    }
+  }
+
+  // ---------- cameras ----------
+  const _c = new THREE.Vector3(), _k = new THREE.Vector3(), _t = new THREE.Vector3();
+  const inPG = (x, y, z, out) => { out.set(x, y, z); return PG.localToWorld(out); };
+  function cam(C, dt) {
+    const Rr = R(), P = Rr.player, car = _t.copy(P.mesh.position); car.y += .8;
+    const u = C.t - C.shotT; frameAt(main, P.s, f); const fw = f.fwd, rt = f.right;
+    let fov = 50, look = _k, smoothCam = 0;
+    switch (C.shot) {
+      case 'flyover': { // on the road ahead, looking back: the plane comes in low over the car
+        if (!C.cam) { frameAt(main, P.s + 95, f); C.cam = f.pos.clone().addScaledVector(f.right, -SD * (H - 1.2)); C.cam.y += 1.1; }
+        _c.copy(C.cam); look.copy(car).lerp(PG.position, .5); fov = 58; break; }
+      case 'follow': // high behind the car: the plane ahead over the road, its ramp opening, and the kicker
+        _c.copy(car).addScaledVector(fw, -15).addScaledVector(rt, -SD * 3); _c.y += 5.5; look.copy(PG.position).lerp(car, .35); fov = 54; break;
+      case 'ramp': { // high over the road beyond the lip, looking back: the car coming up the kicker at the lens, the plane overhead
+        if (!C.cam) { frameAt(main, p.s0 + O.RAMP + 26, f); C.cam = f.pos.clone().addScaledVector(f.right, -SD * (H - 2)); C.cam.y += 9.5; }
+        _c.copy(C.cam); look.copy(car).lerp(PG.position, .25); fov = 54; break; }
+      case 'rise': { // out over the sea side, level with the plane's open ramp, as the car flies up into it
+        if (!C.cam) { frameAt(main, p.s0 + O.RAMP + 34, f); C.cam = f.pos.clone().addScaledVector(f.right, SD * (H + 22)); C.cam.y += O.HC + 1; }
+        _c.copy(C.cam); look.copy(car).lerp(inPG(0, 1.5, 0, _v), .5); fov = 48; break; }
+      case 'inhold': // inside, high at the front of the hold over the cargo, looking out of the open back as the car flies in at the lens
+        inPG(0, 5.4, 14.2, _c); look.copy(car).lerp(inPG(0, 1.5, -10, _v), .3); fov = 64; break;
+      case 'skid': // low in the hold, the car skidding to a stop in a shower of sparks, the ramp closing
+        inPG(-2.1, .9, 16.5, _c); look.copy(car); fov = 60; break;
+      case 'climb': { // from the shore: the plane climbing away out over the bay
+        if (!C.cam) { frameAt(main, P.s + 170, f); C.cam = f.pos.clone().addScaledVector(f.right, -SD * 40); C.cam.y += 3; }
+        _c.copy(C.cam); look.copy(PG.position); fov = lerp(50, 34, smooth(0, 3, u)); break; }
+      case 'fly': { // chase: behind and above the plane, following your lane changes
+        _v.copy(st.fwd).setY(0).normalize(); _c.copy(PG.position).addScaledVector(_v, -98); _c.y += 24 + st.lv * .02;
+        look.copy(PG.position).addScaledVector(st.fwd, 34); look.y += 2; fov = 58; smoothCam = 5;
+        if (C.kill && C.kill.h) { const k = smooth(0, .25, C.t - C.kill.t0) * (1 - smooth(1, 1.3, C.t - C.kill.t0)); look.lerp(C.kill.h.pos, k * .6); }
+        break; }
+      case 'jet': // out on the wing, looking back: the police jet closing from behind
+        inPG(-SD * 20, 9, -26, _c); look.copy(jet.position).lerp(inPG(-SD * 10, 4, -30, _v), .25); fov = 44; break;
+      case 'missile': // riding just behind the missile as it homes in on the engine
+        if (missile.visible) { _v.set(0, 0, 1).applyQuaternion(missile.quaternion); _c.copy(missile.position).addScaledVector(_v, -20); _c.y += 4; _w.copy(PG.position).sub(missile.position).setY(0).normalize(); _c.addScaledVector(_l.set(-_w.z, 0, _w.x), 6); look.copy(missile.position).lerp(inPG(ENG.x, ENG.y, ENG.z, _u), .5); }
+        else { inPG(-SD * 40, 6, 60, _c); look.copy(inPG(ENG.x, ENG.y, ENG.z, _v)); }
+        fov = 50; break;
+      case 'impact': // off the wingtip, level with it: the fireball and the burning engine
+        inPG(ENG.x * 3.2, ENG.y + 5, ENG.z + 34, _c); look.copy(inPG(ENG.x, ENG.y, ENG.z - 4, _v)); fov = 50; break;
+      case 'cabin': // in the hold: red lights, the car rocking on its straps, the ramp dropping open onto the sky
+        inPG(2.2, 4.7, HZ - 1.4, _c); look.copy(car).lerp(inPG(0, 1.2, -8, _v), .45); fov = 60; break;
+      case 'drop': // below and behind the plane: the car rolling off the ramp into thin air
+        inPG(-SD * 10, -9, -60, _c); look.copy(car).lerp(PG.position, .2); fov = 52; break;
+      case 'fall': { // on the road where it lands, looking up: the car dropping at the lens, the plane going down beyond
+        if (!C.cam) { frameAt(main, p.sEnd + 28, f); C.cam = f.pos.clone().addScaledVector(f.right, -SD * 7); C.cam.y += 1.4; }
+        _c.copy(C.cam); look.copy(car); if (PG.visible) look.lerp(PG.position, .15); fov = 56; break; }
+      default: { // land: out in front, the car pulling away from the smoke over the sea
+        if (!C.cam) { frameAt(main, P.s + 30, f); C.cam = f.pos.clone().addScaledVector(f.right, -SD * 5); C.cam.y += 1.2; }
+        _c.copy(C.cam); look.copy(car); fov = 50; }
+    }
+    if (smoothCam && C.cp) C.cp.lerp(_c, 1 - Math.exp(-dt * smoothCam)); else C.cp = _c.clone();
+    camera.position.copy(C.cp);
+    if (Rr.shake > 0) { const s = Rr.shake * .15; camera.position.x += rand(-s, s); camera.position.y += rand(-s, s); Rr.shake = Math.max(0, Rr.shake - dt * 2); }
+    camera.up.set(0, 1, 0); camera.lookAt(look);
+    Rr.fov = C.shot !== C.fovShot ? fov : lerp(Rr.fov, fov, 1 - Math.exp(-dt * 6)); C.fovShot = C.shot; camera.fov = Rr.fov; camera.updateProjectionMatrix();
+    Rr.camOff = null;
+  }
+  function timeScale(C) {
+    let want = { flyover: 1, follow: 1, ramp: .55, rise: .3, inhold: .14, skid: .45, climb: 1, fly: 1, jet: .7, missile: .3, impact: .28, cabin: .55, drop: .32, fall: .45, land: .8 }[C.shot] ?? 1;
+    if (C.shot === 'fly' && C.kill) want = .35;
+    C.tsv = lerp(C.tsv ?? 1, want, want < C.tsv ? .3 : .06);
+    return C.tsv;
+  }
+  return { p, SD, reset, ready, step, pose, cam, timeScale, startJump, busy: () => st && st.ph !== 'idle' && st.ph !== 'done' && st.ph !== 'gone', film: () => st && st.ph };
+}
+
 
 /* ============================ PARTICLES / FX ============================ */
 class Particles {
@@ -5551,7 +6118,10 @@ $('mUnload').onclick = () => { const id = CARS[sel.car].id; delete CAR_MODELS[id
     try { const r = await fetch(u + 'scene.json'); if (r.ok) CAR_MODELS[id].lod = await parseModel(await r.arrayBuffer(), u); } catch (e) { console.warn('lod', id, e); }
   }
   if (Object.keys(CAR_MODELS).length && mode === 'garage') garage.setCar(CARS[sel.car], PAINTS[sel.paint]);
-  syncModelUI(); syncMech();
+  syncModelUI(); syncMech();  for (const [id, m] of Object.entries(PROP_URLS)) { // then the props, which the worlds pick up as they arrive
+    try { const r = await fetch(m.url); if (r.ok) { PROP_MODELS[id] = await parseModel(await r.arrayBuffer(), m.url.replace(/[^/]*$/, '')); for (const fn of propWait[id] || []) { try { fn(PROP_MODELS[id]); } catch (e) { console.warn('prop', id, e); } } propWait[id] = []; } }
+    catch (e) { console.warn('prop', id, e); }
+  }
 })();
 $('mDoors').onclick = () => { garage.st.doors = garage.st.doors ? 0 : 1; Sound.init(); Sound.hit(.15, 300); syncMech(); };
 $('mAero').onclick = () => { const c = CARS[sel.car]; garage.st.aero = (garage.st.aero + 1) % c.aeroModes.length; syncMech(); };
@@ -5796,6 +6366,7 @@ function cineTimeScale() {
   const c = race && race.cine; if (!c) return 1;
   if (c.type === 'jump') return jumpTimeScale();
   if (c.type === 'metro') return metroTimeScale(c);
+  if (c.type === 'ocean') return race.world.ocean.timeScale(c);
   if (c.type === 'short') return shortTimeScale(c);
   if (c.type === 'finale') return 1;
   if (c.type === 'train') return race.ride ? race.ride.ts : 1;
@@ -5860,6 +6431,7 @@ function stepRace(dt) {
   if (R.state !== 'intro') updateMovers(dt);
   if (w.GW) grandStep(dt); // Grand Tour: biome entry cutscenes, the rockslide and the flyover
   if (w.metro) metroStep(dt);
+  if (w.ocean) w.ocean.step(dt, R);
   updateFinale(dt);
   if (R.state === 'intro') { R.introT += dt; if (R.introT >= R.introDur) goRace(); }
   if (R.state === 'count') {
@@ -6061,7 +6633,7 @@ function stepRace(dt) {
     }
     poseOnRoute(t.mesh, w.routes[0], t.s, t.d, Math.atan2(dd, 25));
     t.mesh.visible = t.mesh.position.distanceToSquared(camera.position) < FAR2;
-    for (const p of w.pieces) if (p.all) { const q = pieceAt(p, t.s); if (q) { t.mesh.position.y += q.h; t.mesh.userData.model.rotation.x = -Math.atan(q.slope) * .9; } else if (t.s > p.sEnd && t.s < p.sEnd + 3) t.mesh.userData.model.rotation.x = 0; }
+    for (const p of w.pieces) if (p.all && !p.ocean) { const q = pieceAt(p, t.s); if (q) { t.mesh.position.y += q.h; t.mesh.userData.model.rotation.x = -Math.atan(q.slope) * .9; } else if (t.s > p.sEnd && t.s < p.sEnd + 3) t.mesh.userData.model.rotation.x = 0; }
     for (const wh of t.mesh.userData.wheels) wh.spin.rotation.x += t.cv * dt / wh.r;
     t.vS = t.cv;
   }
@@ -6103,6 +6675,7 @@ function stepRace(dt) {
   }
   R.topSpeed = Math.max(R.topSpeed, P.v / SPEED_SCALE * 3.6);
   for (const r of R.racers) placeRacer(r, dt);
+  if (w.ocean) w.ocean.pose(dt, R);
   if (P.drifting && R.t - P.driftStart > .6 && !P.driftPopped) { pop('Drift', 'var(--amber)', 'charging nitro'); P.driftPopped = true; }
   if (!P.drifting) P.driftPopped = false;
   // ------ effects ------
@@ -6121,7 +6694,7 @@ function stepRace(dt) {
   w.sparks.update(dt); w.smoke.update(dt);
   const sp = P.v / (P.vmax * 1.1);
   const speedAmt = clamp((sp - .6) / .4, 0, 1) * .6 + P.boostLvl * .4;
-  updateSpeedLines(w.lines, dt, P.v, P.jump || (R.cine && (R.cine.type === 'short' || R.cine.type === 'finale' || R.cine.type === 'train' || R.cine.type === 'biome' || R.cine.type === 'event' || R.cine.type === 'metro')) ? 0 : clamp(speedAmt, 0, 1));
+  updateSpeedLines(w.lines, dt, P.v, P.jump || (R.cine && (R.cine.type === 'short' || R.cine.type === 'finale' || R.cine.type === 'train' || R.cine.type === 'biome' || R.cine.type === 'event' || R.cine.type === 'metro' || R.cine.type === 'ocean')) ? 0 : clamp(speedAmt, 0, 1));
   if (w.setBlink) { const t = performance.now() / 1000; for (const b of w.setBlink) { const on = ((t * (b.rate || 1) + b.ph) % 1) < .5; if (b.m) b.m.color.copy(on ? b.on : b.off); else if (b.sprite) b.sprite.visible = on; } }
   const tOn = clamp((sp - .55) * 2, 0, 1);
   const nb = P.nitroOn ? P.boostLvl : 0;
@@ -6166,7 +6739,8 @@ function updateRaceCamera(dt) {
   finalPass.uniforms.uExposure.value = R.world.exposure * (1 - .3 * R.tunnelK);
   if (C && C.type === 'finale') { finaleCamera(dt); return; }
   if (R.state === 'intro') { introCamera(dt); return; }
-  finalPass.uniforms.uFilm.value = approach(finalPass.uniforms.uFilm.value, C && (C.type === 'short' || C.type === 'train' || C.type === 'metro') ? 1 : 0, dt * 2.5);
+  finalPass.uniforms.uFilm.value = approach(finalPass.uniforms.uFilm.value, C && (C.type === 'short' || C.type === 'train' || C.type === 'metro' || (C.type === 'ocean' && C.shot !== 'fly')) ? 1 : 0, dt * 2.5);
+  if (C && C.type === 'ocean') { R.world.ocean.cam(C, dt); return; }
   if (C && C.type === 'jump') { jumpCamera(C, dt); return; }
   if (C && C.type === 'metro') { metroCamera(C, dt); return; }
   if (C && C.type === 'short') { shortCamera(C, dt); return; }
@@ -6318,6 +6892,7 @@ function drawHUD() {
     if (it) {
       const m = Math.round(it.ds / 10) * 10, p = it.p, M = it.M;
       if (p && p.kind === 'bridge') hint = `Drawbridge raised in ${m} m<small>ALL LANES JUMP · KEEP YOUR SPEED</small>`;
+      else if (p && p.kind === 'ocean') hint = `Bay crossing in ${m} m<small>ALL LANES · FULL THROTTLE · CATCH THE PLANE</small>`;
       else if (p && p.kind === 'metro') hint = `Metro bridge in ${m} m<small>ALL LANES · FLY THROUGH THE TRAIN</small>`;
       else if (p && p.kind === 'gorge') hint = `Bridge out in ${m} m<small>ALL LANES JUMP THE GORGE · FULL THROTTLE</small>`;
       else {
@@ -6395,6 +6970,6 @@ garage.setCar(CARS[sel.car], PAINTS[sel.paint]);
 syncMech();
 toGarage();
 requestAnimationFrame(frame);
-window.__apex = { Q, renderer, skipIntro, startRace, toGarage, input, get race() { return race; }, sim(n, dt = 1 / 60) { for (let i = 0; i < n; i++) stepRace(dt); }, drawHUD, models: CAR_MODELS, garage, setConvoyType, camera };
+window.__apex = { Q, renderer, skipIntro, startRace, toGarage, input, get race() { return race; }, sim(n, dt = 1 / 60) { for (let i = 0; i < n; i++) stepRace(dt); }, drawHUD, models: CAR_MODELS, props: PROP_MODELS, garage, setConvoyType, camera };
 
 })();</script>
