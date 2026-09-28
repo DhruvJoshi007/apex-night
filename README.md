@@ -21,5 +21,6 @@ Controls: W throttle, S brake, A/D or ←/→ change lanes, Space drift, hold Sh
 - **c17** (cargo plane): [C17 Plane Game-Ready](https://sketchfab.com/3d-models/c17-plane-game-ready-549bce95137c4304b771a2b046420c6f) by HaVe (https://sketchfab.com/HaVe), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 - **hst** (train): [Train - Intercity 125 Executive with Buffers](https://sketchfab.com/3d-models/train-intercity-125-executive-with-buffers-d42ffaa6d0d14f7fadad06e000d6d2a3) by timblewee (https://sketchfab.com/timblewee), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 - **syd** (city metro): [Sydney Metro Driverless Train Alstom Metropolis](https://sketchfab.com/3d-models/sydney-metro-driverless-train-alstom-metropolis-f926db4de6964070aa70915c505ebf64) by JoTrain The Aussie (https://sketchfab.com/Jotrain), Sketchfab Standard licence (https://sketchfab.com/licenses)
+- **Passengers** (built into the page): [HUMAN_BODY](https://sketchfab.com/3d-models/human-body-f022e4a3641943328b2fbfdf0f7c3e1e) by vistaalienprime (https://sketchfab.com/vistaalienprime5665288), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 
 Each model folder keeps its original `license.txt`. The models were converted for the game; no endorsement by the authors is implied.
