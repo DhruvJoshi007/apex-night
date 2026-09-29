@@ -1447,6 +1447,8 @@ const PROP_URLS = {
   c17: { url: 'models/c17/scene.json', credit: '"C17 Plane Game-Ready" by HaVe, CC BY 4.0' },
   hst: { url: 'models/hst/scene.json', credit: '"Train - Intercity 125 Executive with Buffers" by timblewee, CC BY 4.0' },
   syd: { url: 'models/syd/scene.json', credit: '"Sydney Metro Driverless Train Alstom Metropolis" by JoTrain The Aussie, Sketchfab Standard' },
+  nyc: { url: 'models/nyc/scene.json', credit: '"New York Central #1905 Steam Locomotive" by Geoffrey The Purple Engine, CC BY 4.0' },
+  gus: { url: 'models/gus/scene.json', credit: '"Gustav" by Leafia dev., CC BY 4.0' },
   riy: { url: 'models/riy/scene.json', credit: '"Riyadh Metro" by Meshal Al-harbi, CC BY 4.0' },
 };
 const PROP_MODELS = {}, propWait = {};
@@ -2748,7 +2750,7 @@ function buildWorld(def) {
   const smoke = new Particles(500, false, smokeTex); scene.add(smoke.points);
   const lines = makeSpeedLines();
 
-  const W = { pieces, extras, setBlink, tumble, def, main, routes, branches, scene, root, skyMesh, ring, sun, sunOffset, sunDir: sky.sunDir.clone().normalize(), flare, night, groundY, obstacles, cones, setCone, coneMesh, bandMesh, arrowMats, pickups, sparks, smoke, lines, hemi, G, GW,
+  const W = { kit: spW.kit, pieces, extras, setBlink, tumble, def, main, routes, branches, scene, root, skyMesh, ring, sun, sunOffset, sunDir: sky.sunDir.clone().normalize(), flare, night, groundY, obstacles, cones, setCone, coneMesh, bandMesh, arrowMats, pickups, sparks, smoke, lines, hemi, G, GW,
     bloom: night ? [1.0, 0.55, 0.8] : [0.55, 0.5, 0.9], exposure: night ? 1.15 : 0.95, metro: GW ? GW.metro : null, ocean: GW ? GW.ocean : null };
   if (GW) GW.attach(W);
   return W;
@@ -2776,7 +2778,7 @@ function jumpUpdate(r) {
     r.airY = q.h; r.jumpSlope = q.slope;
     r.v = Math.max(r.v, M ? (q.seg.air ? M.v + 24 : r.v) : 42);
     const u = q.seg.air ? clamp((x - q.seg.s0) / (q.seg.s1 - q.seg.s0), 0, 1) : 0;
-    if (p.kind === 'train' && !q.seg.air) r.v = lerp(r.v, M.v + TRAIN.RIDE, .08); // rolls slowly up the train
+    if (p.kind === 'train' && !q.seg.air) r.v = lerp(r.v, M.v + (M.rideRel ?? TRAIN.RIDE), .08); // rolls slowly up the train (the gun train sets its own pace)
     if (p.kind === 'roll') { r.trick = p.trick || 'roll'; if (q.seg.air) { r.flip = smooth(.06, .88, u); r.flipDir = p.trick === 'flip' ? 1 : p.dir; } else r.flip = 0; }
     // sideways flights: from the right lane onto the train, and off the front of the train back into the right lane
     if (p.metro && r.isPlayer && W.metro && W.metro.state().door) { // line up on the open door on the way up
@@ -2873,9 +2875,9 @@ function jumpCamera(C, dt) {
     if (p.kind === 'board' && (R.rideN || 0) % 2) { at(p.s0 + TRAIN.BOARD_L + TRAIN.BOARD_AIR * .55, TRAIN.TD + 11, 6.5); fov = 48; } // or from beyond the line, the car coming over the wagons at you
     else { at(p.s0 + JUMP.ROLL_L + TRAIN.BOARD_AIR * .8, p.d - 10, 2.3); fov = 50; }
   } else { // train: alongside the engine as you sail over it, then out in front as you land
-    const T = TRAIN, pr = M.prof, alt = ((R.rideN || 1) - 1) % 2;
-    if (alt) { if (u < .5) { at(pr.front + 6, dM + 1.5, T.LOCO_H + 4.5); fov = 56; } else { at(pr.sEnd - 8, lanesFor(MAIN_HW)[2] + 7, 9); fov = 52; } } // over the cab, then high over the landing
-    else if (u < .58) { at(pr.locoRear + T.LOCO * .5, dM + side * 11, T.LOCO_H + 1); fov = 50; }
+    const T = TRAIN, pr = M.prof, alt = ((R.rideN || 1) - 1) % 2, LH = M.style === 'gustav' ? T.GUN_H : T.LOCO_H;
+    if (alt) { if (u < .5) { at(pr.front + 6, dM + 1.5, LH + 4.5); fov = 56; } else { at(pr.sEnd - 8, lanesFor(MAIN_HW)[2] + 7, 9); fov = 52; } } // over the cab, then high over the landing
+    else if (u < .58) { at(pr.locoRear + T.LOCO * .5, dM + side * 11, LH + 1); fov = 50; }
     else { at(pr.sEnd + 16, lanesFor(MAIN_HW)[2] - 4, 1.3); fov = 46; }
   }
   camera.position.copy(_jc);
@@ -2909,7 +2911,7 @@ function startTrainRide(M) {
   const D = R.rideDeck || (R.rideDeck = {});
   // Every pairing of an attack from ahead and one from behind, dealt without repeats, so a race's six rides all differ.
   if (!D.combos || !D.combos.length) { D.combos = []; for (const a of RIDE_ATTACKS.ahead) for (const b of RIDE_ATTACKS.behind) D.combos.push([a, b]); D.combos.sort(() => Math.random() - .5); }
-  const order = D.combos.shift();
+  const order = M.style === 'gustav' ? [] : D.combos.shift(); // on the gun train the fight is yours (p10)
   R.rideN = (R.rideN || 0) + 1;
   R.ride = { M, t: 0, att: null, next: .4, n: 0, order, ts: 1 };
   if (R.cine) endCine();
@@ -3067,6 +3069,7 @@ function placeSvcRamp(V, k, s, d) {
 const _rc = new THREE.Vector3(), _rl = new THREE.Vector3();
 function trainRideCamera(C, dt) {
   const R = race, P = R.player, V = R.ride, main = R.world.main;
+  if (V && V.gun && gusGunCamera(C, dt)) return;
   if (!V) return;
   const A = V.att, f = frameAt(main, P.s), fwd = f.fwd, right = f.right, p = P.mesh.position, cy = p.y + P.airY;
   const cop = A ? A.cops[0] : null, cp = cop ? cop.mesh.position : null, ccy = cop ? cp.y + cop.airY : 0;
@@ -3584,7 +3587,7 @@ function hideHeli(W) { if (W && W.heli) { W.heli.visible = W.heli.userData.cone.
 // The train runs on its own line beside the road (TD = distance right of the centre line). You board it by jumping
 // off a ramp in the right lane (BOARD_*), ride it while the police try to ram you from the road, and jump back off the front.
 // Rolling stock is built about 1.9x real width so two cars fit side by side on the roofs (DECK = roof height).
-const TRAIN = { W: 6.4, DECK: 4.4, WAG: 17, GAPW: .9, N: 8, LOCO: 21, LOCO_H: 5.9, KICK: 5, KICK_H: 5.3, SUB: 1.6, GAUGE: 1.9, TENDER: 7,
+const TRAIN = { W: 6.4, DECK: 4.4, WAG: 17, GAPW: .9, N: 8, LOCO: 21, LOCO_H: 5.9, KICK: 5, KICK_H: 5.3, GUN_H: 11.6, SUB: 1.6, GAUGE: 1.9, TENDER: 7,
   TD: MAIN_HW + 8.5, BOARD_L: 13, BOARD_H: 3, BOARD_AIR: 42, BOARD_APEX: 7.8, LAND_X: 22, RIDE: 5, LEAD: 150, ZONE: 1300 };
 // three kinds of train: a metro in the city, an old streamlined diesel with boxcars in the desert, modern container freight elsewhere
 const TRAIN_TYPES = {
@@ -3592,6 +3595,7 @@ const TRAIN_TYPES = {
   diesel: { title: 'The old diesel', sub: 'desert freight · 1950s iron · police in pursuit' },
   freight: { title: 'Freight line', sub: 'double-stack country · police on the ballast' },
   intercity: { title: 'InterCity 125', sub: 'the express at full chat · police on the line' },
+  gustav: { title: 'Schwerer Gustav', sub: 'the armoured gun train · police helicopters inbound' },
 };
 // stunt ramp trucks: RAMP/RAMP_H is the launch ramp on the semi, CAB where its cab starts; CRAMP the car carrier's loading ramp
 const CONVOY = { RAMP: 16, RAMP_H: 4.2, CAB: 17.6, CAB_L: 4.4, CRAMP: 13, W: 3.2 };
@@ -3605,7 +3609,7 @@ function planExtras(main, branches, pieces, def) {
   // the Grand Tour's cave is one long tunnel through the whole underground section (built with its own look in p7)
   if (G) for (const r of G.ranges) if (r.key === 'cave') { out.tunnels.push({ a: r.a + 6, b: r.b - 6, cave: true }); used.push([r.a, r.b]); }
   // rail lines: one on the short tracks; on the Grand Tour old diesels run in the desert, container freights in the canyon, forest and along the coast, and a metro through the evening city
-  for (const [style, ats] of G ? [['diesel', [.2, .16, .26].map(u => fr('desert', u))], ['freight', [.7, .64, .76].map(u => fr('desert', u))], ['intercity', [.55, .45, .65].map(u => fr('canyon', u))], ['freight', [.55, .45, .65].map(u => fr('forest', u))], ['intercity', [.1, .12, .08].map(u => fr('coast', u))], ['metro', [.4, .3, .5].map(u => fr('city', u, 1))]] : [[night ? 'metro' : 'freight', [.42, .56, .3, .66]]]) {
+  for (const [style, ats] of G ? [['gustav', [.2, .16, .26].map(u => fr('desert', u))], ['freight', [.7, .64, .76].map(u => fr('desert', u))], ['intercity', [.55, .45, .65].map(u => fr('canyon', u))], ['freight', [.55, .45, .65].map(u => fr('forest', u))], ['intercity', [.1, .12, .08].map(u => fr('coast', u))], ['metro', [.4, .3, .5].map(u => fr('city', u, 1))]] : [[night ? 'metro' : 'freight', [.42, .56, .3, .66]]]) {
     let s = null, len = 0; for (const L2 of [2700, 2200, 1700, TRAIN.ZONE, 1100, 960]) { for (const at of ats) { s = find(L2, at, true); if (s !== null) break; } if (s !== null) { len = L2; break; } }
     if (s !== null) { // the boarding ramp is an ordinary set piece in the right lane; its flight ends on the train deck
       const T = TRAIN, b0 = s + T.LEAD, land = b0 + T.BOARD_L + T.BOARD_AIR, d = lanesFor(MAIN_HW)[2];
@@ -3631,11 +3635,11 @@ function convoyProfile(kind) {
   const { DECK_H, CARRIER_L } = JUMP, rear = C.CRAMP, front = C.CRAMP + CARRIER_L, land = front + 24; // up the loading ramp, along the top deck, off the front
   return { rear, front, sEnd: land, segs: [linSeg(0, .3, C.CRAMP, DECK_H), linSeg(C.CRAMP, DECK_H, front - .5, DECK_H), arcSeg(front - .5, DECK_H, land, 0, DECK_H + 1.1)] };
 }
-function trainProfile() { // x = 0 is the back of the last wagon; you land on the deck from the side
-  const T = TRAIN, wag0 = 0, lastEnd = wag0 + T.N * T.WAG + (T.N - 1) * T.GAPW;
-  const locoRear = lastEnd + T.TENDER, locoFront = locoRear + T.LOCO, k0 = lastEnd - T.KICK, land = locoFront + 30;
+function trainProfile(style) { // x = 0 is the back of the last wagon; you land on the deck from the side
+  const T = TRAIN, wag0 = 0, lastEnd = wag0 + T.N * T.WAG + (T.N - 1) * T.GAPW, gun = style === 'gustav'; // the railway gun at the front is twice an engine's height
+  const locoRear = lastEnd + T.TENDER, locoFront = locoRear + T.LOCO, k0 = lastEnd - T.KICK, land = locoFront + (gun ? 58 : 30);
   return { wag0, lastEnd, locoRear, front: locoFront, sEnd: land,
-    segs: [linSeg(0, T.DECK, k0, T.DECK), linSeg(k0, T.DECK, lastEnd, T.KICK_H), clearArc(lastEnd, T.KICK_H, land, 0, locoRear - 1, locoFront + 1, T.LOCO_H, .5)] };
+    segs: [linSeg(0, T.DECK, k0, T.DECK), linSeg(k0, T.DECK, lastEnd, T.KICK_H), clearArc(lastEnd, T.KICK_H, land, 0, gun ? lastEnd + .5 : locoRear - 1, locoFront + 1, gun ? T.GUN_H : T.LOCO_H, .5)] };
 }
 
 // The Sydney Metro model: three cars along +x (the driving cab at the +x end), 3.05 m wide with the roof at 4.12 m.
@@ -3704,6 +3708,8 @@ function riyCar(m, kind, L, rev) {
   wrap.scale.set(T.W / 2, T.DECK / 2.79, L / S.len); if (rev) { wrap.rotation.y = Math.PI; wrap.position.z = L; }
   return wrap;
 }
+// Schwerer Gustav's barrel: its axis height and where it leaves the gun house (model units)
+const GUS_BARREL = { y: 37, z: 41 };
 // the rolling stock for one train: wagons from the back (x = 0) forward, then a short buffer car, then the engine
 function buildTrainCars(M, pr, part, kit) {
   const T = TRAIN, st = M.style, W2 = T.W, DK = T.DECK;
@@ -3732,6 +3738,14 @@ function buildTrainCars(M, pr, part, kit) {
     g.fillStyle = '#3a3e43'; g.font = 'italic 800 26px sans-serif'; g.fillText('INTERCITY', w - 200, h * .86); });
   const icBody = std('#ffffff', { map: icTex, roughness: .45, metalness: .25 });
   const silver = std('#c9ced6', { metalness: .85, roughness: .25 }), blueBand = std('#1f5fd6', { roughness: .4 }), winMat = new THREE.MeshStandardMaterial({ color: '#10161f', roughness: .1, metalness: .6, emissive: C('#ffe6b0'), emissiveIntensity: .25 });
+  // armour plate for the gun train: olive drab plates with weld seams and rivet rows, a little rust and mud
+  const armTex = canvasTex(512, 256, (g, w, h) => { g.fillStyle = '#4c5436'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 90; i++) { g.fillStyle = `rgba(${rand(20, 60) | 0},${rand(24, 50) | 0},${rand(10, 30) | 0},${rand(.08, .2)})`; g.beginPath(); g.ellipse(rand(0, w), rand(0, h), rand(10, 60), rand(6, 30), rand(0, 3), 0, 7); g.fill(); }
+    for (let x = 0; x < w; x += 128) { g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(x, 0, 3, h); g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(x + 3, 0, 2, h); for (let y = 8; y < h; y += 14) { g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(x + 8, y, 4, 4); g.fillRect(x + 118, y, 4, 4); g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(x + 8, y, 2, 2); g.fillRect(x + 118, y, 2, 2); } }
+    g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(0, h * .5, w, 3);
+    for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(120,60,20,${rand(.1, .3)})`; g.fillRect(rand(0, w), rand(0, h), rand(2, 5), rand(10, 40)); }
+    g.fillStyle = 'rgba(240,240,230,.8)'; g.font = '700 26px "Chakra Petch", sans-serif'; g.fillText('PZ.ZUG 7', 150, h * .38); });
+  const armour = std('#ffffff', { map: armTex, roughness: .75, metalness: .45 });
   // --- wagons ---
   for (let i = 0; i < T.N; i++) {
     const x0 = pr.wag0 + i * (T.WAG + T.GAPW), g0 = part(x0, T.WAG), L = T.WAG;
@@ -3745,6 +3759,13 @@ function buildTrainCars(M, pr, part, kit) {
       box(W2, DK - 1.4, L - .4, boxMats[i % 4], 0, 1.35 + (DK - 1.4) / 2 - .05, L / 2, g);
       box(W2 - .1, .08, L - .4, roofMat, 0, DK - .04, L / 2, g); box(1.2, .06, L - .4, std('#7a5a3a', { roughness: .9 }), 0, DK + .02, L / 2, g);
       for (const sx of [-1, 1]) for (const z of [.3, L - .3]) box(.1, DK - 1.3, .1, black, sx * (W2 / 2 + .02), 2.9, z, g); // corner ladders
+    } else if (st === 'gustav') { // an armoured wagon: sloped plate sides with firing slits, a roof walk, a hatch
+      box(W2 * .82, .5, L - .2, black, 0, 1.1, L / 2, g);
+      box(W2, DK - 1.75, L - .4, armour, 0, 1.35 + (DK - 1.75) / 2 - .05, L / 2, g);
+      for (const sx of [-1, 1]) { const sl = box(1.1, .5, L - .4, armour, sx * (W2 / 2 - .5), DK - .55, L / 2, g); sl.rotation.z = sx * .38;
+        for (let z = 1.6; z < L - 1; z += 2.8) box(.04, .12, 1.2, black, sx * (W2 / 2 + .01), 2.3, z, g); }
+      box(W2 - 1.2, .4, L - .4, armour, 0, DK - .2, L / 2, g); box(W2 - 1.4, .05, L - .6, roofMat, 0, DK + .01, L / 2, g);
+      box(1.1, .3, 1.1, armour, 1.6, DK + .15, L * .3, g);
     } else if (st === 'intercity') { // a Mk3 coach: long flat sides in Executive livery, a rounded grey roof
       box(W2, DK - 1.2, L - .3, icBody, 0, 1.2 + (DK - 1.2) / 2 - .05, L / 2, g);
       box(W2 - .1, .08, L - .3, roofMat, 0, DK - .04, L / 2, g); for (const sx of [-1, 1]) box(.3, .25, L - .3, std('#6a6e73', { roughness: .5 }), sx * (W2 / 2 - .1), DK - .18, L / 2, g);
@@ -3767,14 +3788,35 @@ function buildTrainCars(M, pr, part, kit) {
     }
   }
   // --- between the last wagon and the engine: a buffer flat, a tank car, or the metro's gangway module ---
-  { const len = T.TENDER - 1, g = part(pr.lastEnd + .5, len);
+  const slot = T.TENDER - .5 + T.LOCO; // from the last wagon to the front: the engine and its tender (or the railway gun)
+  if (st !== 'gustav') { const len = T.TENDER - 1, g = part(pr.lastEnd + .5, len); M.tenderG = g;
     if (st === 'metro') { box(W2 - .6, DK - 1.4, len, silver, 0, 1.2 + (DK - 1.4) / 2, len / 2, g); box(W2 - .6, .35, len, blueBand, 0, 2.2, len / 2, g); }
     else if (st === 'intercity') box(W2 - .4, DK - 1.4, len, icBody, 0, 1.2 + (DK - 1.4) / 2, len / 2, g);
     else if (st === 'diesel') { const tk = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, len - .4, 18).rotateX(Math.PI / 2), black); tk.position.set(0, 2.8, len / 2); tk.castShadow = true; g.add(tk); box(W2 * .7, .4, len, black, 0, 1.2, len / 2, g); }
     else { box(W2 * .8, .45, len, frameY, 0, 1.3, len / 2, g); }
     truck(g, len / 2, 2); }
   // --- the engine ---
-  const g = part(pr.locoRear, T.LOCO), L = T.LOCO;
+  if (st === 'gustav') { // Schwerer Gustav (the real model): its barrel is a separate part that swings to aim (p10)
+    const gg = part(pr.lastEnd + .5, slot), stand = new THREE.Group(); gg.add(stand);
+    box(W2, 3.2, slot - 1, armour, 0, 2.5, slot / 2, stand); box(W2 * .7, 3.6, 9, armour, 0, 5.9, slot * .45, stand); box(.9, .9, 15, black, 0, 5.6, slot * .45 + 11, stand);
+    M.gus = { g: gg, stand, wrap: null, pivot: null };
+    whenProp('gus', m => {
+      const list = []; m.updateMatrixWorld(true); m.traverse(o => { if (o.isMesh) list.push(o); });
+      const GB = GUS_BARREL, inBarrel = (x, y, z) => Math.abs(x) < 4.5 && Math.abs(y - GB.y) < 5 && z > GB.z;
+      const wrap = new THREE.Group(); wrap.scale.set(W2 / 38.3, 11 / 72, slot / 169.8); wrap.position.z = 85.24 * wrap.scale.z; gg.add(wrap);
+      for (const { geo, mat } of sydMerge(list, (x, y, z) => !inBarrel(x, y, z))) { const o = new THREE.Mesh(geo, mat); o.castShadow = o.receiveShadow = true; wrap.add(o); }
+      const pivot = new THREE.Group(); pivot.position.set(0, GB.y, GB.z); wrap.add(pivot);
+      for (const { geo, mat } of sydMerge(list, inBarrel)) { geo.translate(0, -GB.y, -GB.z); const o = new THREE.Mesh(geo, mat); o.castShadow = true; pivot.add(o); }
+      stand.visible = false; M.gus.wrap = wrap; M.gus.pivot = pivot;
+    });
+    return;
+  }
+  const g = part(pr.locoRear, T.LOCO), L = T.LOCO; M.locoG = g;
+  if (st === 'freight') whenProp('nyc', m => { // New York Central #1905 (the real model) and its tender, over the stand-in diesel
+    const sp = part(pr.lastEnd + .5, slot), c = m.clone(true), w = new THREE.Group(); c.position.z = 80.27; w.add(c); w.scale.set(W2 / 38.94, T.LOCO_H / 54.73, slot / 184.98);
+    c.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); sp.add(w); M.tenderG.visible = false; M.locoG.visible = false;
+    if (M.active) for (const q of M.parts) q.g.visible = true;
+  });
   if (st === 'freight') { // a modern six-axle freight diesel: long hood, radiator wings, wide-nose cab, walkways and handrails
     const body = std('#d9dcdf', { metalness: .4, roughness: .45 }), roof = std('#3a3d42', { roughness: .5 }), rail = std('#c8ccd0', { metalness: .6, roughness: .4 });
     box(W2, .7, L, black, 0, 1.75, L / 2, g); // frame and walkway
@@ -3889,7 +3931,7 @@ function buildExtras(W, extras) {
   for (const def of extras.movers) {
     const M = { ...def, type0: def.type, parts: [], obst: [], active: false, spawned: false, s: 0, v: 0, d: 0 };
     if (def.kind === 'train') {
-      const T = TRAIN, pr = trainProfile(); M.prof = pr; M.len = pr.front; M.half = T.W / 2;
+      const T = TRAIN, pr = trainProfile(def.style); M.prof = pr; M.len = pr.front; M.half = T.W / 2;
       M.piece = { kind: 'train', segs: pr.segs, sEnd: pr.sEnd, mover: M };
       const part = (x0, len) => { const g = new THREE.Group(), inner2 = new THREE.Group(); inner2.position.z = -len / 2; g.add(inner2); g.visible = false; root.add(g); M.parts.push({ g, x: x0 + len / 2 }); return inner2; };
       M.style = def.style || 'freight';
@@ -4656,7 +4698,8 @@ function buildCave(W, t, halfW, topH, chamber, chunkAt, anim) {
   // a point on the rock at angle a (0 = right floor, pi/2 = ceiling, pi = left floor), pulled in slightly
   const onWall = (s, a, k) => [Math.cos(a) * halfW(s) * k, Math.sin(a) * topH(s) * k];
   for (let s = t.a + 30; s < t.b - 20; s += 26) { const [d, y] = onWall(s, Math.PI / 2 + (Math.floor(s / 26) % 2 ? .45 : -.45), .93); lights.push({ s, d, y, c: [1.6, 1.05, .55], r: 30 }); }
-  for (let s = t.a + 60; s < t.b - 40; s += rand(40, 70)) { const cyan = Math.random() < .55, a = Math.random() < .5 ? rand(.12, .6) : rand(2.5, 3.0), [d, y] = onWall(s, a, .96); lights.push({ s, d, y: Math.max(1, y), a, c: cyan ? [.3, 1.4, 1.9] : [1.5, .35, 1.7], r: 26, crystal: true }); }
+  const lined = W.G ? tunLined(W.G) : [0, 0], bare = s => s < lined[0] - 12 || s > lined[1] + 4; // the police tunnel is lined: no crystals in there
+  for (let s = t.a + 60; s < t.b - 40; s += rand(40, 70)) { if (!bare(s)) continue; const cyan = Math.random() < .55, a = Math.random() < .5 ? rand(.12, .6) : rand(2.5, 3.0), [d, y] = onWall(s, a, .96); lights.push({ s, d, y: Math.max(1, y), a, c: cyan ? [.3, 1.4, 1.9] : [1.5, .35, 1.7], r: 26, crystal: true }); }
   const NU = 26, prof = (u, s) => { // u: 0 = left inner floor edge, 1 = right inner floor edge
     const hw = halfW(s), top = topH(s);
     if (u < 2 / NU) return [-lerp(H + .6, hw, u * NU / 2), -.25 - 2.2 * chamber(s) * u * NU / 2];
@@ -4696,8 +4739,8 @@ function buildCave(W, t, halfW, topH, chamber, chunkAt, anim) {
   const smG = new THREE.ConeGeometry(1, 1, 6); smG.translate(0, .5, 0);
   const stM = new THREE.MeshBasicMaterial({ color: '#3c3440', map: rockTex });
   const tips = [], mites = [];
-  for (let s = t.a + 10; s < t.b - 10; s += rand(4, 9)) { const [d, y] = prof(rand(.35, .65), s); tips.push([s, d, y, rand(.5, 1.6), rand(2, 7 + 10 * chamber(s))]); }
-  for (let s = t.a + 10; s < t.b - 10; s += rand(6, 14)) for (const sd of [-1, 1]) { const hw = halfW(s); if (hw < H + 4) continue; mites.push([s, sd * rand(H + 2.5, hw - 1), -.2 - 2.2 * chamber(s) * .5, rand(.4, 1.3), rand(1, 4 + 6 * chamber(s))]); }
+  for (let s = t.a + 10; s < t.b - 10; s += rand(4, 9)) { if (!bare(s)) continue; const [d, y] = prof(rand(.35, .65), s); tips.push([s, d, y, rand(.5, 1.6), rand(2, 7 + 10 * chamber(s))]); }
+  for (let s = t.a + 10; s < t.b - 10; s += rand(6, 14)) for (const sd of [-1, 1]) { const hw = halfW(s); if (hw < H + 4 || !bare(s)) continue; mites.push([s, sd * rand(H + 2.5, hw - 1), -.2 - 2.2 * chamber(s) * .5, rand(.4, 1.3), rand(1, 4 + 6 * chamber(s))]); }
   for (const [list, g0] of [[tips, stG], [mites, smG]]) { const im = new THREE.InstancedMesh(g0, stM, list.length); list.forEach(([s, d, y, r, h], i) => { frameAt(main, s, f); v.copy(f.pos).addScaledVector(f.right, d); v.y += y; m4.compose(v, q.identity(), sc.set(r, h, r)); im.setMatrixAt(i, m4); }); root.add(bound(im)); }
   // light pools on the road under the lamps
   const poolTex = canvasTex(64, 128, (g, w, h) => { const im = g.createImageData(w, h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const dy = (y / h - .5) / .22, a = Math.exp(-dy * dy) * (.6 + .4 * Math.exp(-(((x / w - .5) / .5) ** 2))); const i = (y * w + x) * 4; im.data[i] = 255; im.data[i + 1] = 190; im.data[i + 2] = 130; im.data[i + 3] = Math.min(255, a * 170); } g.putImageData(im, 0, 0); }, false);
@@ -4907,8 +4950,8 @@ function buildGrandEvents(W, c, api) {
   const eCross = u => u * u * (1.6 - .6 * u); // how far across (0..1) a block is, u of the way through its run
   const uAt = fr => { let a = 0, b = 1; for (let i = 0; i < 24; i++) { const m = (a + b) / 2; if (eCross(m) < fr) a = m; else b = m; } return (a + b) / 2; };
   function startAva(R, P, ps, SL) {
-    const v = Math.max(P.v, 40), lanes = lanesFor(H), down = up > 0 ? 0 : lanes.length - 1, mid = 1, tc = 2.3, sc = ps + v * tc; // the car reaches sc tc seconds from now
-    const plan = [[.55, down], [1.8, mid], [2.5, down]]; // the car's lane flicks: away from the slope, back through the gap, and away again
+    const v = Math.max(P.v, 40), lanes = lanesFor(H), down = up > 0 ? 0 : lanes.length - 1, mid = 1, tc = 2.3 + AVA_PRE, sc = ps + v * tc; // the car reaches sc tc seconds from now
+    const plan = [[.55 + AVA_PRE, down], [1.8 + AVA_PRE, mid], [2.5 + AVA_PRE, down]]; // the car's lane flicks: away from the slope, back through the gap, and away again
     const laneAt = t => { let l = P.lane; for (const [at, ln] of plan) if (t >= at) l = ln; return l; };
     const list = chunks.map((c, k) => {
       const a = k < 12 ? lerp(-34, 40, k / 11) + rand(-3, 3) : rand(-70, 70), tk = tc + a / v; // where along the zone, and when the car gets there
@@ -4917,18 +4960,25 @@ function buildGrandEvents(W, c, api) {
       const uc = uAt((dCar - d0) / (d1 - d0)); // how far through its run it is when level with the car's lane
       return { ...c, s: sc + a, d0, d1, dur, delay: Math.max(0, tk + dt0 - uc * dur), spin: new THREE.Vector3(rand(-1, 1), rand(-.3, .3), rand(-1, 1)).normalize(), ang: 0, dust: near ? .95 : .6 };
     });
-    const pl = puffs.map((sp, k) => ({ sp, s: sc + rand(-80, 90), d0: up * (H + 70 + rand(0, 30)), d1: -up * (H + rand(-4, 22)), dur: rand(2, 2.8), delay: rand(-.2, 1.9) + (k % 3) * .12, lift: rand(1, 12), size: rand(10, 22), spin: rand(-.4, .4) }));
+    const pl = puffs.map((sp, k) => ({ sp, s: sc + rand(-80, 90), d0: up * (H + 70 + rand(0, 30)), d1: -up * (H + rand(-4, 22)), dur: rand(2, 2.8), delay: rand(-.2, 1.9) + (k % 3) * .12 + AVA_PRE, lift: rand(1, 12), size: rand(10, 22), spin: rand(-.4, .4) }));
     const bl = billows.map((m, k) => { const a = k % 2 ? rand(-90, -30) : rand(35, 95), tk = tc + a / v, dCar = lanes[laneAt(tk)]; // behind the car's line they cross after it, ahead of it before it
       const d0 = up * (H + 60 + rand(0, 30)), d1 = -up * (H + rand(4, 26)), dur = rand(1.9, 2.5), uc = uAt((dCar - d0) / (d1 - d0));
       return { m, s: sc + a, d0, d1, dur, delay: Math.max(0, tk + (a < 0 ? rand(.3, .6) : -rand(.3, .6)) - uc * dur), r: rand(6, 11), ph: rand(0, 6) }; });
     for (const b of bl) { b.m.visible = true; b.m.scale.setScalar(.01); }
     for (const r of rocks) r.m.visible = false; for (const c of list) c.m.visible = true; for (const p of pl) { p.sp.visible = true; p.sp.material.opacity = 0; }
     ev = { kind: 'ava', key: 'ava', SL, t: 0, sc, tc, list, pl, bl, plan, lane0: P.lane, done: 0 };
+    // nothing else on the road through the film: traffic ahead moves on beyond the slide
+    const L = main.L; for (const t of R.world.traffic) { if (t.knock > 0) continue; const ds = ((t.s - ps) % L + L) % L; if (ds < sc - ps + 260 || ds > L - 25) { t.s = (sc + 420 + rand(0, 300)) % L; t.cv = t.v; } }
     R.cine = { type: 'event', kind: 'ava', t: 0, dur: 30, tc }; // ends on the avalanche's own clock
     $('movieTitle').innerHTML = '<b>Avalanche</b><small>Thread it flat out</small>'; { const hud = $('hud'); hud.classList.remove('movie'); void hud.offsetWidth; hud.classList.add('cine', 'movie'); }
     Sound.hit(1, 70); Sound.whoosh(.8, .5); R.shake = Math.max(R.shake, .9);
   }
   function stepAva(dt, R, P) {
+    if (ev.t < AVA_PRE + .4) { // the cornice lets go: powder bursting off the ridge along the slope above the road, and a low rumble
+      for (let k = 0; k < 6; k++) { frameAt(main, ev.sc + rand(-90, 90), f); const d = up * (H + rand(45, 90) - 30 * smooth(0, AVA_PRE, ev.t)), x = f.pos.x + f.right.x * d, z = f.pos.z + f.right.z * d, gy = Math.max(T(x, z), f.pos.y);
+        const c = rand(.72, .86); race.world.smoke.spawn(x, gy + rand(1, 5), z, rand(-4, 4) - f.right.x * up * 9, rand(4, 11), rand(-4, 4) - f.right.z * up * 9, c, c + .03, c + .1, rand(10, 20), 2.4, 8, .6); }
+      R.shake = Math.max(R.shake, .25 + .35 * smooth(0, AVA_PRE, ev.t)); if (!ev.crack && ev.t > .25) { ev.crack = 1; Sound.hit(1, 50); Sound.whoosh(.6, .4); }
+    }
     for (const [at, ln] of ev.plan) if (ev.t >= at && ev.t - dt < at) { P.lane = ln; Sound.whoosh(.35, 1.6); } // the car's flicks
     let closest = 1e9;
     for (const r of ev.list) {
@@ -4944,26 +4994,27 @@ function buildGrandEvents(W, c, api) {
       const u = clamp((ev.t - p.delay) / p.dur, 0, 1), d = lerp(p.d0, p.d1, eCross(u)); frameAt(main, p.s, f);
       const x = f.pos.x + f.right.x * d, z = f.pos.z + f.right.z * d, gy = Math.abs(d) < H + 1 ? f.pos.y : Math.max(T(x, z), f.pos.y - 60), sz = p.size * (.6 + u * .9);
       p.sp.position.set(x, gy + sz * .32 + p.lift * u, z); p.sp.scale.setScalar(sz); p.sp.material.rotation += p.spin * dt;
-      p.sp.material.opacity = u <= 0 ? 0 : Math.min(1, u * 5) * .6 * (1 - smooth(4.2, 6.5, ev.t)) * clamp(p.sp.position.distanceTo(camera.position) / 14 - .3, 0, 1); // thins out near the lens
+      p.sp.material.opacity = u <= 0 ? 0 : Math.min(1, u * 5) * .6 * (1 - smooth(4.2 + AVA_PRE, 7.5 + AVA_PRE, ev.t)) * clamp(p.sp.position.distanceTo(camera.position) / 14 - .3, 0, 1); // thins out near the lens
     }
     for (const b of ev.bl) { // the front rolls on, swelling as it goes, then slumps and settles over the road edge
       const u = clamp((ev.t - b.delay) / b.dur, 0, 1), d = lerp(b.d0, b.d1, eCross(u)); frameAt(main, b.s, f);
       const x = f.pos.x + f.right.x * d, z = f.pos.z + f.right.z * d, gy = Math.abs(d) < H + 1 ? f.pos.y : Math.max(T(x, z), f.pos.y - 60);
-      const r = b.r * (.35 + .65 * smooth(0, .4, u)) * (1 - .45 * smooth(.85, 1, u)) * (1 - smooth(4.5, 6.5, ev.t));
+      const r = b.r * (.35 + .65 * smooth(0, .4, u)) * (1 - .45 * smooth(.85, 1, u)) * (1 - smooth(4.5 + AVA_PRE, 7.5 + AVA_PRE, ev.t));
       b.m.position.set(x, gy + r * .35, z); b.m.scale.set(r * (1 + .08 * Math.sin(ev.t * 6 + b.ph)), r * (1 + .1 * Math.sin(ev.t * 5 + b.ph * 2)), r); b.m.rotation.y = b.ph + ev.t * .6; b.m.visible = r > .3; // gathering at the top of the slope before it lets go
       if (u > 0 && u < 1 && Math.random() < .7) race.world.smoke.spawn(x + rand(-r, r) * .5, gy + r * .8, z + rand(-r, r) * .5, rand(-4, 4), rand(3, 7), rand(-4, 4), .97, .98, 1, r * 1.6, 2, 5, .5);
     }
     if (closest < 9 && !ev.close) { ev.close = 1; R.shake = Math.max(R.shake, .7); Sound.hit(.8, 90); }
-    if (ev.t > 2.5 && !ev.popped) { ev.popped = 1; pop('Threaded the avalanche', 'var(--amber)', 'elite line · +25% nitro'); P.nitro = Math.min(1, P.nitro + .25); }
-    if (ev.t > 4.6 && R.cine && R.cine.kind === 'ava') endCine();
-    if (ev.t > 7) { for (const r of ev.list) r.m.visible = false; for (const p of ev.pl) p.sp.visible = false; for (const b of ev.bl) b.m.visible = false; ev = null; }
+    if (ev.t > 2.5 + AVA_PRE && !ev.popped) { ev.popped = 1; pop('Threaded the avalanche', 'var(--amber)', 'elite line · +25% nitro'); P.nitro = Math.min(1, P.nitro + .25); }
+    if (ev.t > 5.8 + AVA_PRE && R.cine && R.cine.kind === 'ava') endCine();
+    if (ev.t > 8.5 + AVA_PRE) { for (const r of ev.list) r.m.visible = false; for (const p of ev.pl) p.sp.visible = false; for (const b of ev.bl) b.m.visible = false; ev = null; }
   }
   api.avaEv = () => ev && ev.kind === 'ava' ? ev : null;
   const canCine = R => { const P = R.player; return R.state === 'race' && !R.ride && !P.jump && P.wreck <= 0 && !R.finale && (!R.cine || R.cine.type === 'lane'); };
   api.events = (dt, R, ps) => {
     const P = R.player, g = R.grand;
     for (const key in SLIDES) { const SL = SLIDES[key]; // a rockslide / avalanche: boulders come down across the road just ahead
-      if (g[key] || ps < SL.s - 250 || ps > SL.s - 150 || !canCine(R)) continue;
+      const lead = key === 'ava' ? Math.max(P.v, 40) * AVA_PRE : 0; // the avalanche film starts earlier, with the ridge breaking
+      if (g[key] || ps < SL.s - 250 - lead || ps > SL.s - 150 - lead || !canCine(R)) continue;
       g[key] = 1; if (R.cine) endCine(); up = SL.up; rockMat.color.set(SL.col);
       if (key === 'ava') { startAva(R, P, ps, SL); continue; }
       const sc = ps + P.v * 2.5, n = key === 'ava' ? 14 : 9;
@@ -5020,10 +5071,13 @@ function buildGrandEvents(W, c, api) {
       if (n) { _gk.multiplyScalar(1 / n); look.lerp(car, .45); } else look.copy(car); fov = 58;
     } else if (C.type === 'event' && C.kind === 'ava') { // the avalanche dodge, cut from four angles
       const e = ev && ev.kind === 'ava' ? ev : null, tt = e ? e.t : C.t, down = -up; // game time drives the cuts so they line up with the choreography
-      const shot = tt < 1.15 ? 'slope' : tt < 2.05 ? 'front' : tt < 2.85 ? 'side' : 'escape';
+      const shot = tt < AVA_PRE ? 'peak' : tt < 1.15 + AVA_PRE ? 'slope' : tt < 2.05 + AVA_PRE ? 'front' : tt < 2.85 + AVA_PRE ? 'side' : 'escape';
       if (shot !== C.shot) { C.shot = shot; C.st = tt; C.cam = null; R.flash = Math.max(R.flash, shot === 'escape' ? .5 : .12); }
       const su = tt - C.st;
-      if (shot === 'slope') { // at the downhill kerb ahead, looking up the mountainside as it lets go, the car racing into frame
+      if (shot === 'peak') { // down the road, looking up the mountain as the ridge breaks away, the car small below it
+        if (!C.cam) { frameAt(main, e ? e.sc + 110 : ps + 300, f); C.cam = f.pos.clone().addScaledVector(f.right, down * (H - 1)); C.cam.y += 2.2; frameAt(main, e ? e.sc - 60 : ps + 120, f); C.lk = f.pos.clone().addScaledVector(f.right, up * 38); C.lk.y += 16; }
+        pos.copy(C.cam); look.copy(C.lk).lerp(car, smooth(0, AVA_PRE, su) * .35); fov = lerp(40, 50, smooth(0, AVA_PRE, su));
+      } else if (shot === 'slope') { // at the downhill kerb ahead, looking up the mountainside as it lets go, the car racing into frame
         if (!C.cam) { frameAt(main, e ? e.sc + 70 : ps + 220, f); C.cam = f.pos.clone().addScaledVector(f.right, down * (H - 2)); C.cam.y += 5; frameAt(main, e ? e.sc : ps + 150, f); C.lk = f.pos.clone().addScaledVector(f.right, up * 45); C.lk.y += 14; }
         pos.copy(C.cam); look.copy(C.lk).lerp(car, smooth(.2, 1.1, su) * .5); fov = 52;
       } else if (shot === 'front') { // low in front of the car, looking back at it as the slabs smash across between you
@@ -5060,10 +5114,11 @@ function buildGrandEvents(W, c, api) {
   };
 }
 const _jf = new THREE.Vector3(), _jt = new THREE.Vector3(), _gl = new THREE.Vector3(), _gf = new THREE.Vector3(), _gp = new THREE.Vector3(), _gk = new THREE.Vector3();
+const AVA_PRE = 1.4; // the avalanche film's opening: the ridge breaking away before the slabs reach the road
 function grandTimeScale(C) {
   const u = C.t / C.dur, bell = smooth(0, .14, u) * (1 - smooth(.8, 1, u));
   if (C.type === 'event' && C.kind === 'ava') { const e = race.world.GW && race.world.GW.avaEv(), t = e ? e.t : 9; // deep slow motion as the car threads the slabs, then back to full speed
-    return t < .9 ? .75 : t < 1.6 ? lerp(.75, .22, smooth(.9, 1.6, t)) : t < 2.75 ? .22 : lerp(.22, 1, smooth(2.75, 3.5, t)); }
+    const q = t - AVA_PRE; return q < .9 ? .75 : q < 1.6 ? lerp(.75, .22, smooth(.9, 1.6, q)) : q < 2.95 ? .22 : lerp(.22, 1, smooth(2.95, 3.9, q)); }
   if (C.type === 'event') return 1 - (C.kind === 'rock' ? .6 : .5) * bell;
   return 1 - (GRAND_SHOT[C.key] === 'burst' || GRAND_SHOT[C.key] === 'portal' ? .6 : .5) * bell;
 }
@@ -5694,11 +5749,54 @@ function buildOcean(W, T, SEA) {
   const engL = new THREE.Vector3(9, 3.9, 6.5), engR = new THREE.Vector3(-9, 3.9, 6.5); // inner engines, model units
   const toPG = v => v.clone().add(new THREE.Vector3(0, -1.62, 10.9)).multiplyScalar(S);
   const ENG = toPG(SD > 0 ? engR : engL); // the engine on the sea side (the camera sits out there)
+  // the airframe's paint: a satin clear coat over the grey, deeper panel lines, and a touch of the sky reflected in it
+  const skinMats = new Map();
+  const skinMat = m => { if (!m || skinMats.has(m)) return skinMats.get(m) || m;
+    const n = new THREE.MeshPhysicalMaterial({ map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, metalnessMap: m.metalnessMap, color: new THREE.Color('#c9d0d8'), metalness: .3, roughness: .6, clearcoat: .5, clearcoatRoughness: .3, envMapIntensity: 1.35, side: m.side });
+    if (m.normalMap) n.normalScale = new THREE.Vector2(1.6, 1.6); skinMats.set(m, n); return n; };
+  // lights and moving parts, in model units (the body group's frame, before the model's offset)
+  const inM = (x, y, z) => new THREE.Vector3(x, y - 1.62, z + 10.9);
+  const nav = []; // [sprite, kind]
+  const addGlow = (col, sc, p, kind) => { const g = kit.glow(col, sc); g.position.copy(p); body.add(g); nav.push({ g, kind, sc }); return g; };
+  addGlow(new THREE.Color(6, .25, .15), 1.5, inM(30.2, 7.4, -11.2), 'nav'); addGlow(new THREE.Color(.2, 5, .8), 1.5, inM(-30.2, 7.4, -11.2), 'nav'); addGlow(new THREE.Color(4, 4, 4), 1.2, inM(0, 7.2, -38.5), 'nav');
+  for (const x of [30.3, -30.3]) addGlow(new THREE.Color(9, 9, 10), 3, inM(x, 7.4, -11.4), 'strobe');
+  addGlow(new THREE.Color(9, 9, 10), 2.6, inM(0, 19.4, -32.2), 'strobe');
+  addGlow(new THREE.Color(7, .3, .15), 1.8, inM(0, 8.6, 2), 'beacon'); addGlow(new THREE.Color(7, .3, .15), 1.6, inM(0, -.1, 6), 'beacon');
+  for (const x of [-1.4, 1.4]) addGlow(new THREE.Color(8, 7.6, 6.5), 3.2, inM(x, .9, 17.5), 'land');
+  const beamM = new THREE.MeshBasicMaterial({ color: new THREE.Color(.5, .47, .4), transparent: true, opacity: .07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const beam = new THREE.Mesh(new THREE.ConeGeometry(4.5, 34, 20, 1, true), beamM); beam.geometry.translate(0, -17, 0); beam.rotation.x = -Math.PI / 2 + .3; beam.position.copy(inM(0, .8, 17.8)); body.add(beam);
+  // fans turning in the intakes, and a heat glow at each exhaust
+  const fanG = new THREE.Group(), fanM = new THREE.MeshStandardMaterial({ color: '#3a3e44', metalness: .8, roughness: .35 }), fans = [];
+  { const disc = new THREE.Mesh(new THREE.CircleGeometry(.98, 24), new THREE.MeshBasicMaterial({ color: '#07080a' })); fanG.add(disc);
+    for (let k = 0; k < 18; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(.05, .92, .02), fanM); b.position.set(Math.sin(k / 18 * Math.PI * 2) * .5, Math.cos(k / 18 * Math.PI * 2) * .5, .03); b.rotation.set(0, .5, -k / 18 * Math.PI * 2); fanG.add(b); }
+    const sp = new THREE.Mesh(new THREE.ConeGeometry(.28, .5, 16).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#d8dce2', metalness: .7, roughness: .3 })); sp.position.z = .25; fanG.add(sp);
+    // a white spiral on the spinner so its turning shows
+    const sw = new THREE.Mesh(new THREE.PlaneGeometry(.06, .3), new THREE.MeshBasicMaterial({ color: '#fff' })); sw.position.set(.08, .06, .38); sw.rotation.x = -.6; fanG.add(sw); }
+  const exh = [];
+  for (const [x, y, z, zb] of [[9, 3.62, 9.75, 4.9], [-9, 3.62, 9.75, 4.9], [15.1, 2.95, 7.05, 2.2], [-15.1, 2.95, 7.05, 2.2]]) {
+    const f = fanG.clone(); f.position.copy(inM(x, y, z)); body.add(f); fans.push(f);
+    const e = kit.glow(new THREE.Color(1.6, .7, .3), 2.2); e.position.copy(inM(x, y, zb - .2)); body.add(e); exh.push(e);
+  }
+  function detailStep(dt, t) {
+    for (const n of nav) {
+      if (n.kind === 'strobe') { const u = t % 1.3; n.g.visible = u < .06 || (u > .16 && u < .22); }
+      else if (n.kind === 'beacon') n.g.scale.setScalar(n.sc * (.35 + .65 * Math.max(0, Math.sin(t * 7.5))));
+      else if (n.kind === 'land') n.g.visible = !!st && (st.ph === 'appr' || st.ph === 'air' || st.ph === 'hold');
+    }
+    beam.visible = !!st && (st.ph === 'appr' || st.ph === 'air');
+    const rpm = st && st.impact ? 9 : 26; fans.forEach((f, i) => { f.rotation.z += dt * (i === (SD > 0 ? 1 : 0) && st && st.impact ? 3 : rpm); });
+    for (const e of exh) e.scale.setScalar(2.2 * (.85 + .3 * Math.random()));
+    // wingtip vortices when the plane is pulling through the air
+    if (PG.visible && st && (st.ph === 'fly' || st.ph === 'strike' || st.ph === 'appr' && !st.plane)) for (const x of [30.1, -30.1]) if (Math.random() < .7) {
+      _v.copy(inM(x, 7.35, -11.4)).multiplyScalar(S); PG.localToWorld(_v); smoke.spawn(_v.x, _v.y, _v.z, rand(-.3, .3), rand(-.3, .3), rand(-.3, .3), .92, .94, .98, .55, rand(.7, 1.1), 1.2, .2);
+    }
+  }
   whenProp('c17', src => {
     const mdl = src.clone(true); mdl.updateMatrixWorld(true);
     const dd = mdl.getObjectByName('DropDoor'), dm = dd && (dd.isMesh ? dd : dd.children.find(c => c.isMesh));
     if (dm) { const M = dm.matrixWorld.clone(); dm.parent.remove(dm); dm.matrixAutoUpdate = false; dm.matrix.copy(new THREE.Matrix4().makeTranslation(0, -1.62, 10.9).multiply(M)); door.add(dm); }
-    mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+    mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; o.material = skinMat(o.material); } });
+    if (dm) dm.material = skinMat(dm.material);
     mdl.position.set(0, -1.62, 10.9); body.add(mdl);
     door.position.set(0, 0, 0); body.add(door); // the door group pivots at the sill (the body's origin after the offset)
     loaded = true;
@@ -5958,6 +6056,7 @@ function buildOcean(W, T, SEA) {
   }
   // after the racers have moved: put the car in the hold (or blend it out of it) and the plane in the sky
   function pose(dt, Rr) {
+    if (PG.visible) detailStep(dt, performance.now() / 1000);
     if (!st || st.ph === 'idle' || st.ph === 'gone' || st.ph === 'done' || !PG.visible && !st.fall) return;
     const P = Rr.player, C = Rr.cine; let x = P.s - p.s0; if (x < -main.L / 2) x += main.L;
     const ud = P.mesh.userData, model = ud.model;
@@ -6069,6 +6168,599 @@ function buildOcean(W, T, SEA) {
     return C.tsv;
   }
   return { p, SD, reset, ready, step, pose, cam, timeScale, startJump, busy: () => st && st.ph !== 'idle' && st.ph !== 'done' && st.ph !== 'gone', film: () => st && st.ph };
+}
+
+/* ============================ THE GUN TRAIN ============================ */
+// In the desert the armoured train has Schwerer Gustav at its head. Police helicopters chase you up to its boarding
+// ramp (a short film). Once you land on the roof the car races up the wagons to the gun and you take control of it:
+// A/D (or the arrow keys, or the lane buttons) pick a helicopter, Space (or a tap) fires. Bring them all down and the
+// car carries on over the kicker and off the front, over the gun.
+const GUN = { KILLS: 6, TIME: 45, RELOAD: .8, SHELL: 430, YAW: 1.15, PITCH: .95, TURN: 1.8, LEN: 44 };
+let GS = null;
+function gusTrain() { const L = race.world.extras && race.world.extras.list; return L && L.find(M => M.kind === 'train' && M.style === 'gustav') || null; }
+function gusInit() {
+  const R = race, W = R.world, kit = W.kit;
+  if (GS) { for (const h of GS.helis) h.g.parent && h.g.parent.remove(h.g); for (const o of GS.extra) o.parent && o.parent.remove(o); }
+  const helis = [];
+  for (let i = 0; i < GUN.KILLS; i++) {
+    const g = makeHeli(); g.scale.setScalar(2.1); const r = kit.glow(new THREE.Color(6, .3, .2), 4), b = kit.glow(new THREE.Color(.3, .7, 7), 4);
+    r.position.set(-1.6, -.4, .3); b.position.set(1.6, -.4, .3); g.userData.body.add(r, b); g.userData.r2 = r; g.userData.b2 = b; g.visible = false; W.scene.add(g); helis.push({ g, on: false, i });
+  }
+  const fire = new Particles(900, true, glowTex), smoke = new Particles(1100, false, smokeTex); W.scene.add(fire.points, smoke.points);
+  const tracer = () => { const s = kit.glow(new THREE.Color(7, 4, 1.4), 5); s.visible = false; W.scene.add(s); return s; };
+  const shells = [0, 1, 2, 3].map(() => ({ on: false, s: tracer(), pos: new THREE.Vector3(), dir: new THREE.Vector3(), t: 0 }));
+  const rockets = [0, 1, 2, 3, 4, 5].map(() => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.CylinderGeometry(.25, .25, 2.4, 8).rotateX(Math.PI / 2), MAT.alu)); const fl = kit.glow(new THREE.Color(5, 2.4, .8), 3.2); fl.position.z = -1.5; g.add(fl); g.visible = false; W.scene.add(g); return { on: false, g, pos: new THREE.Vector3(), to: new THREE.Vector3(), t: 0, T: 1 }; });
+  const flash = kit.glow(new THREE.Color(8, 5, 2), 26); flash.visible = false; W.scene.add(flash);
+  const ringTex = canvasTex(128, 128, (g, w, h) => { g.strokeStyle = '#fff'; g.lineWidth = 7; g.beginPath(); g.arc(w / 2, h / 2, 44, 0, Math.PI * 2); g.stroke(); for (const a of [0, 1, 2, 3]) { const c = Math.cos(a * Math.PI / 2), s = Math.sin(a * Math.PI / 2); g.beginPath(); g.moveTo(w / 2 + c * 30, h / 2 + s * 30); g.lineTo(w / 2 + c * 60, h / 2 + s * 60); g.stroke(); } }, false);
+  const ring = new THREE.Sprite(new THREE.SpriteMaterial({ map: ringTex, color: new THREE.Color(1.6, 1.6, 1.6), depthTest: false, transparent: true })); ring.visible = false; ring.renderOrder = 10; W.scene.add(ring);
+  GS = { R, W, helis, fire, smoke, shells, rockets, flash, ring, extra: [fire.points, smoke.points, flash, ring, ...shells.map(s => s.s), ...rockets.map(r => r.g)], ph: 'idle', f: newFrame(), f2: newFrame() };
+}
+const _gv = new THREE.Vector3(), _gw = new THREE.Vector3(), _gu = new THREE.Vector3(), _gm = new THREE.Matrix4(), _gq = new THREE.Quaternion(), GUP = new THREE.Vector3(0, 1, 0);
+function gusSky(on, text, lock) { const el = $('skyHud'); if (!el) return; el.className = on ? (lock ? 'on lock' : 'on') : ''; if (text !== undefined) el.querySelector('b').textContent = text; }
+function gusBoom(v, k = 1) {
+  for (let i = 0; i < 55 * k; i++) GS.fire.spawn(v.x, v.y, v.z, rand(-13, 13) * k, rand(-5, 15) * k, rand(-13, 13) * k, 4, rand(1.2, 2.4), .35, rand(3, 6) * k, rand(.5, 1.1), 4 * k, 1.5, 2);
+  for (let i = 0; i < 36 * k; i++) GS.smoke.spawn(v.x, v.y, v.z, rand(-7, 7) * k, rand(0, 8) * k, rand(-7, 7) * k, .16, .14, .12, rand(5, 8) * k, rand(2, 3.4), 6 * k, 1.2, -.5);
+}
+// where the gun is: the middle of the gun car along the road, and its lateral place
+function gusBase(M) { const pr = M.prof; return M.s + pr.lastEnd + .5 + (TRAIN.TENDER - .5 + TRAIN.LOCO) / 2; }
+function heliWorld(h, out) { const f = GS.f; frameAt(race.world.main, h.s, f); return out.copy(f.pos).addScaledVector(f.right, h.d).setY(f.pos.y + h.h); }
+// before the racers move: the chase, the fight, the shells and rockets
+function gusStep(dt) {
+  const R = race; if (!R.world.extras) return;
+  if (!GS || GS.R !== R) gusInit();
+  const G = GS, P = R.player, M = gusTrain(); if (!M) return;
+  G.fire.update(dt); G.smoke.update(dt);
+  const main = R.world.main, L = main.L, b = M.board, ps = P.route < 0 ? P.s : mainEq(P);
+  let x = ps - b.s0; if (x < -L / 2) x += L; if (x > L / 2) x -= L;
+  const V = R.ride && R.ride.M === M ? R.ride : null;
+  if (G.ph === 'idle') {
+    if (!(M.active && !M.boarded && R.state === 'race' && x > -560 && x < -380 && P.wreck <= 0 && !P.jump && !R.ride && P.route < 0)) return;
+    G.ph = 'chase'; G.t = 0; G.kills = 0; G.spawned = 0; G.armour = 100; G.ti = 0; G.yaw = 0; G.pitch = .1; G.reload = 0; G.recoil = 0;
+    [[-30, -5, 13], [-44, 7, 17], [-58, -13, 22], [-70, 3, 26]].forEach(([back, dd, hh], i) => { const h = G.helis[i]; Object.assign(h, { on: true, st: 'chase', s: ps + back - 120, d: dd, h: hh + 10, cs: back, cd: dd, ch: hh, t: 0, cool: rand(2, 4), dead: null }); h.g.visible = true; G.spawned++; });
+    const free = R.state === 'race' && !R.finale && (!R.cine || R.cine.type === 'lane');
+    if (free) { if (R.cine) endCine(); R.cine = { type: 'gus', t: 0, dur: 99, shot: 'chase', shotT: 0, tsv: 1 };
+      $('cineLabel').innerHTML = ''; $('movieTitle').innerHTML = '<b>Gunship Pursuit</b><small>Police helicopters on your tail · the gun train is on the line</small>'; $('hud').classList.add('cine', 'movie'); Sound.whoosh(.5, 1.8); Sound.siren(.08); }
+    P.lane = 2; return;
+  }
+  const C = R.cine && R.cine.type === 'gus' ? R.cine : null;
+  if (G.ph === 'chase') {
+    if (C) { const shot = x < -440 ? 'chase' : x < -300 ? 'gun' : 'swoop'; if (shot !== C.shot) { C.shot = shot; C.shotT = C.t; } P.lane = 2; if (x > -40) endCine(); }
+    if (R.state !== 'race' || P.wreck > 0 || x > b.sEnd - b.s0 + 60 && !V) { gusFlee(); G.ph = 'done'; }
+    if (V) { G.ph = 'intro'; V.gun = G; M.rideRel = 46; for (const h of G.helis) if (h.on) h.st = 'in'; const tag = $('laneTag'); tag.textContent = 'To the gun!'; tag.className = ''; void tag.offsetWidth; tag.className = 'show'; }
+  }
+  if ((G.ph === 'intro' || G.ph === 'fight') && !V) { gusFlee(); G.ph = 'done'; M.rideRel = null; gusSky(false); }
+  if (G.ph === 'intro') {
+    const rx = P.s - M.s, hold = M.prof.lastEnd - TRAIN.KICK - 9;
+    if (rx > hold - 30) M.rideRel = clamp((hold - rx) * 1.6, 0, 46);
+    if (rx > hold - 1.5 && M.gus.pivot) { M.rideRel = 0; G.ph = 'fight'; G.t = 0; G.hintT = 0; $('hud').classList.remove('movie');
+      $('movieTitle').innerHTML = '<b>Take the gun</b><small>80 cm · seven tonnes a shell · bring them down</small>'; const hud = $('hud'); void hud.offsetWidth; hud.classList.add('movie'); setTimeout(() => hud.classList.remove('movie'), 2200);
+      gusSky(true, touchCapable ? 'Lane buttons pick a helicopter · tap to fire' : 'A / D pick a helicopter · Space fires'); Sound.hit(.8, 120); }
+  }
+  if (G.ph === 'fight') {
+    G.t += dt; G.hintT += dt; G.reload -= dt; G.recoil = Math.max(0, G.recoil - dt * 1.6);
+    const alive = G.helis.filter(h => h.on && h.st !== 'dead' && h.st !== 'out');
+    if (alive.length < 3 && G.spawned < GUN.KILLS && G.t > 1.5) gusSpawn(M);
+    // pick a target
+    if (input.laneTap && alive.length) { const order = alive.slice().sort((a, c) => a.d - c.d), cur = order.indexOf(G.target); G.target = order[clamp((cur < 0 ? 0 : cur) + Math.sign(input.laneTap), 0, order.length - 1)]; Sound.blip(900, .06, 'square', .05); }
+    input.laneTap = 0;
+    if (!G.target || !alive.includes(G.target)) G.target = alive.sort((a, c) => Math.abs(a.d - M.d) - Math.abs(c.d - M.d))[0] || null;
+    // swing the barrel onto it
+    const piv = M.gus.pivot, wrap = M.gus.wrap; let locked = false;
+    if (piv) {
+      wrap.updateWorldMatrix(true, true);
+      if (G.target) { heliWorld(G.target, _gv); _gm.copy(wrap.matrixWorld).invert(); _gv.applyMatrix4(_gm).sub(piv.position);
+        const wy = clamp(Math.atan2(_gv.x, _gv.z), -GUN.YAW, GUN.YAW), wp = clamp(Math.atan2(_gv.y, Math.hypot(_gv.x, _gv.z)), -.05, GUN.PITCH);
+        G.yaw = approach(G.yaw, wy, GUN.TURN * dt); G.pitch = approach(G.pitch, wp, GUN.TURN * .8 * dt); locked = Math.abs(G.yaw - wy) < .03 && Math.abs(G.pitch - wp) < .03; }
+      else { G.yaw = approach(G.yaw, 0, dt); G.pitch = approach(G.pitch, .15, dt); }
+      piv.rotation.set(-G.pitch, G.yaw, 0, 'YXZ'); piv.position.z = GUS_BARREL.z - 6 * G.recoil * G.recoil;
+    }
+    G.locked = locked;
+    // fire
+    const want = input.drift || G.tap; G.tap = false;
+    if (want && !G.held && G.reload <= 0 && piv) gusFire(M, locked ? G.target : null);
+    G.held = input.drift;
+    const n = G.helis.filter(h => h.on && h.st !== 'dead').length, warn = G.helis.some(h => h.on && h.st === 'aim');
+    if (G.hintT > 5) gusSky(true, `Helicopters down ${G.kills} / ${GUN.KILLS} · armour ${Math.max(0, G.armour | 0)}%${locked ? ' · locked' : ''}`, warn);
+    else gusSky(true, undefined, warn);
+    if (G.kills >= GUN.KILLS || G.t > GUN.TIME || (n === 0 && G.spawned >= GUN.KILLS)) {
+      G.ph = 'done'; gusFlee(); M.rideRel = 16; gusSky(false); G.ring.visible = false;
+      pop(G.kills >= GUN.KILLS ? 'Sky cleared!' : 'They pulled back', 'var(--nitro)', `${G.kills} helicopters down · +40% nitro`); P.nitro = Math.min(1, P.nitro + .4);
+      const tag = $('laneTag'); tag.textContent = 'Over the gun'; tag.className = ''; void tag.offsetWidth; tag.className = 'show';
+    }
+  }
+  if (G.ph === 'done' && M.rideRel != null && !V) M.rideRel = null;
+  gusHelis(dt, M, ps);
+  gusShells(dt, M);
+  gusRockets(dt, M);
+  if (G.flash.visible && (G.flashT -= dt) <= 0) G.flash.visible = false;
+  // the reticle on the target
+  const tg = G.ph === 'fight' ? G.target : null; G.ring.visible = !!tg;
+  if (tg) { G.ring.position.copy(tg.g.position); const d = camera.position.distanceTo(tg.g.position); G.ring.scale.setScalar(d * .09); G.ring.material.color.setRGB(G.locked ? 6 : 1.6, G.locked ? .4 : 1.6, G.locked ? .3 : 1.6); G.ring.material.rotation += dt * (G.locked ? 4 : 1); }
+}
+function gusSpawn(M) {
+  const G = GS, h = G.helis.find(q => !q.on); if (!h) return;
+  const side = G.spawned % 2 ? -1 : 1;
+  Object.assign(h, { on: true, st: 'in', s: M.s - 60, d: M.d + side * rand(30, 50), h: 45, t: 0, cool: rand(1.5, 3), dead: null }); h.g.visible = true; G.spawned++;
+  Sound.blip(260, .3, 'sawtooth', .06);
+}
+function gusFlee() { for (const h of GS.helis) if (h.on && h.st !== 'dead') { h.st = 'out'; h.t = 0; } for (const r of GS.rockets) { r.on = false; r.g.visible = false; } }
+// each helicopter's slot beside and ahead of the gun: they hang in its arc of fire, weaving, and take turns to shoot
+const HELI_SLOTS = [[95, -42, 22], [130, 28, 28], [80, 34, 17], [150, -20, 33], [115, -60, 26], [170, 10, 21]];
+function gusHelis(dt, M, ps) {
+  const G = GS, R = race, T0 = performance.now() / 1000, gb = gusBase(M), fightOn = G.ph === 'fight' || G.ph === 'intro';
+  for (const h of G.helis) {
+    if (!h.on) continue;
+    const ud = h.g.userData; ud.rotor.rotation.y += dt * 40; ud.tail.rotation.x += dt * 60; const bl = T0 % .6; ud.r2.visible = bl < .15; ud.b2.visible = bl > .3 && bl < .45;
+    h.t += dt;
+    if (h.st === 'dead') {
+      const D = h.dead; D.t += dt; D.vy -= 15 * dt; h.s += D.vs * dt; h.d += D.vd * dt; h.h += D.vy * dt; heliWorld(h, h.g.position); h.g.rotation.y += D.spin * dt; ud.body.rotation.z += dt * .9;
+      const p = h.g.position; if (Math.random() < .8) { G.smoke.spawn(p.x, p.y, p.z, rand(-2, 2), rand(1, 3), rand(-2, 2), .1, .1, .1, rand(4, 7), 2.4, 5, .5, -.3); G.fire.spawn(p.x, p.y, p.z, rand(-3, 3), rand(-2, 3), rand(-3, 3), 4, 1.6, .3, rand(2, 4), .5, 2); }
+      if (h.h < .5 || D.t > 7) { gusBoom(p, 1.3); R.shake = Math.max(R.shake, .4); Sound.hit(.8, 70); h.on = false; h.g.visible = false; }
+      continue;
+    }
+    let base, ts, td, th, k = 1.4;
+    if (h.st === 'chase') { base = ps; ts = ps + h.cs + Math.sin(h.t * .9 + h.i) * 4; td = h.cd + Math.sin(h.t * .7 + h.i * 2) * 3; th = h.ch + Math.sin(h.t * 1.1 + h.i) * 1.5; k = 1.2; }
+    else if (h.st === 'out') { base = M.s; ts = h.s - 30 * dt * 0 - 60; td = h.d + Math.sign(h.d - M.d || 1) * 40; th = h.h + 25; k = .5; if (h.t > 5) { h.on = false; h.g.visible = false; continue; } }
+    else { const sl = HELI_SLOTS[h.i], w = Math.sin(h.t * .6 + h.i * 1.7); base = gb; ts = gb + sl[0] + w * 12; td = M.d + sl[1] + Math.sin(h.t * .45 + h.i) * 10; th = sl[2] + Math.sin(h.t * .8 + h.i) * 4; k = h.st === 'in' ? .9 : 1.1;
+      if (h.st === 'in' && Math.abs(ts - h.s) < 25) { h.st = 'hold'; h.t = 0; } }
+    const v = h.st === 'chase' ? race.player.v : M.v;
+    h.s += v * dt; const e = 1 - Math.exp(-dt * k); h.s += (ts - h.s) * e; h.d += (td - h.d) * e; h.h += (th - h.h) * e;
+    heliWorld(h, h.g.position);
+    const f = G.f; frameAt(race.world.main, h.s, f);
+    h.g.rotation.set(0, Math.atan2(f.fwd.x, f.fwd.z) + clamp((M.d - h.d) * .006, -.35, .35), 0); ud.body.rotation.x = .16; ud.body.rotation.z = clamp((td - h.d) * -.02, -.4, .4);
+    // shooting at the train: a warning (the lock), then a rocket
+    if (G.ph === 'fight' && h.st === 'hold') { h.cool -= dt; if (h.cool < 1.1 && !h.aimed) { h.aimed = true; h.st = 'aim'; } }
+    if (h.st === 'aim') { h.cool -= dt; if (h.cool <= 0) { gusRocket(h, M); h.st = 'hold'; h.aimed = false; h.cool = rand(3.5, 6); } }
+  }
+}
+function gusKill(h) {
+  const G = GS, R = race, P = R.player; h.st = 'dead'; h.dead = { vs: race.world.extras.list ? gusTrain().v * .8 : 0, vd: rand(-6, 6), vy: rand(2, 6), spin: rand(4, 7) * (Math.random() < .5 ? -1 : 1), t: 0 };
+  gusBoom(h.g.position, 1.2); R.flash = Math.max(R.flash, .6); R.shake = Math.max(R.shake, .7); Sound.hit(1, 90); Sound.blip(120, .5, 'sawtooth', .12);
+  G.kills++; R.takedowns++; P.nitro = Math.min(1, P.nitro + .1); pop(G.kills >= GUN.KILLS ? 'Last one down!' : 'Direct hit!', 'var(--hot)', `helicopter down · ${G.kills} / ${GUN.KILLS}`);
+  if (G.target === h) G.target = null;
+}
+function gusFire(M, target) {
+  const G = GS, R = race, piv = M.gus.pivot, sh = G.shells.find(q => !q.on); if (!sh) return;
+  G.reload = GUN.RELOAD; G.recoil = 1;
+  piv.updateWorldMatrix(true, true); const mz = piv.localToWorld(_gv.set(0, 0, GUN.LEN)), root = piv.localToWorld(_gw.set(0, 0, 0));
+  sh.on = true; sh.t = 0; sh.pos.copy(mz); sh.dir.copy(mz).sub(root).normalize(); sh.target = target; sh.s.visible = true;
+  G.flash.position.copy(mz).addScaledVector(sh.dir, 3); G.flash.visible = true; G.flashT = .09;
+  for (let i = 0; i < 40; i++) G.smoke.spawn(mz.x, mz.y, mz.z, sh.dir.x * rand(8, 30) + rand(-5, 5), sh.dir.y * rand(8, 30) + rand(-2, 5), sh.dir.z * rand(8, 30) + rand(-5, 5), .55, .52, .48, rand(3, 6), rand(1.2, 2.4), 5, 1.4, -.3);
+  for (let i = 0; i < 30; i++) G.fire.spawn(mz.x, mz.y, mz.z, sh.dir.x * rand(20, 50) + rand(-6, 6), sh.dir.y * rand(20, 50) + rand(-6, 6), sh.dir.z * rand(20, 50) + rand(-6, 6), 4, 2, .5, rand(2, 4), rand(.1, .25), 3, 3, 0);
+  R.shake = Math.max(R.shake, 1.1); R.flash = Math.max(R.flash, .35); Sound.hit(1, 45); Sound.blip(55, .7, 'sawtooth', .18); Sound.whoosh(.5, .5);
+}
+function gusShells(dt, M) {
+  const G = GS;
+  for (const sh of G.shells) {
+    if (!sh.on) continue;
+    sh.t += dt;
+    if (sh.target && sh.target.on && sh.target.st !== 'dead') { _gw.copy(sh.target.g.position).sub(sh.pos).normalize(); sh.dir.lerp(_gw, Math.min(1, dt * 8)).normalize(); }
+    const step = GUN.SHELL * dt; let hit = null;
+    for (const h of G.helis) if (h.on && h.st !== 'dead' && h.st !== 'out') { _gw.copy(h.g.position).sub(sh.pos); const along = clamp(_gw.dot(sh.dir), 0, step); if (_gw.addScaledVector(sh.dir, -along).length() < 7) { hit = h; break; } }
+    sh.pos.addScaledVector(sh.dir, step); sh.s.position.copy(sh.pos);
+    G.smoke.spawn(sh.pos.x, sh.pos.y, sh.pos.z, 0, 0, 0, .6, .58, .55, 1.6, .8, 3, .5);
+    if (hit) { gusKill(hit); sh.on = false; sh.s.visible = false; }
+    else if (sh.t > 2.2) { sh.on = false; sh.s.visible = false; }
+  }
+}
+function gusRocket(h, M) {
+  const G = GS, r = G.rockets.find(q => !q.on); if (!r) return;
+  const f = G.f2; frameAt(race.world.main, gusBase(M) + rand(-40, 8) + M.v * 1.1, f);
+  r.on = true; r.t = 0; r.pos.copy(h.g.position); r.to.copy(f.pos).addScaledVector(f.right, M.d + rand(-2, 2)).setY(f.pos.y + rand(3, 6)); r.T = r.pos.distanceTo(r.to) / 120; r.from = r.pos.clone(); r.g.visible = true;
+  Sound.whoosh(.4, .5);
+}
+function gusRockets(dt, M) {
+  const G = GS, R = race;
+  for (const r of G.rockets) {
+    if (!r.on) continue;
+    r.t += dt; const u = clamp(r.t / r.T, 0, 1); r.pos.copy(r.from).lerp(r.to, u); r.pos.y += Math.sin(Math.PI * u) * 3;
+    r.g.position.copy(r.pos); r.g.lookAt(r.to);
+    G.smoke.spawn(r.pos.x, r.pos.y, r.pos.z, rand(-.5, .5), rand(-.5, .5), rand(-.5, .5), .75, .74, .72, 2, 1.4, 3, .8);
+    if (u >= 1) { r.on = false; r.g.visible = false; gusBoom(r.pos, .7); for (let i = 0; i < 40; i++) R.world.sparks.spawn(r.pos.x, r.pos.y, r.pos.z, rand(-12, 12), rand(2, 12), rand(-12, 12), 4, 2, .6, .3, rand(.3, .7), -.2, 1.2, 14);
+      R.shake = Math.max(R.shake, .9); Sound.hit(.9, 150); if (G.ph === 'fight') { G.armour -= 7; pop('Rocket hit the train', '#ff3b30', `armour ${Math.max(0, G.armour | 0)}%`); } }
+  }
+}
+// the film on the way to the ramp, and the gunner's view in the fight
+function gusTimeScale(C) { const want = { chase: .75, gun: .6, swoop: .7 }[C.shot] ?? 1; C.tsv = lerp(C.tsv ?? 1, want, .08); return C.tsv; }
+const _gsc = new THREE.Vector3(), _gsl = new THREE.Vector3();
+function gusCamera(C, dt) {
+  const R = race, P = R.player, G = GS, M = gusTrain(), main = R.world.main, f = G.f2, u = C.t - C.shotT;
+  const car = _gsl.copy(P.mesh.position); car.y += P.airY + .7;
+  let fov = 52; const lead = G.helis.find(h => h.on && h.st === 'chase');
+  if (C.shot === 'chase' && lead) { // riding behind the lead helicopter, the car on the road ahead of it
+    frameAt(main, lead.s - 34, f); _gsc.copy(f.pos).addScaledVector(f.right, lead.d + 5).setY(lead.g.position.y + 7); _gw.copy(car).lerp(lead.g.position, .15); fov = 54;
+  } else if (C.shot === 'gun' && M) { // beyond the line beside the gun: its barrel in the foreground, the car and the helicopters coming
+    frameAt(main, gusBase(M) + 30, f); _gsc.copy(f.pos).addScaledVector(f.right, M.d + 9).setY(f.pos.y + 2.2 + u * .5); frameAt(main, gusBase(M) - 10, G.f); _gw.copy(car).lerp(_gv.copy(G.f.pos).addScaledVector(G.f.right, M.d).setY(G.f.pos.y + 6), .6); fov = 54;
+  } else { // swoop: low on the road ahead of the car, the helicopters swarming over it
+    frameAt(main, P.s + 46 - u * 6, f); _gsc.copy(f.pos).addScaledVector(f.right, P.d - 7).setY(f.pos.y + 1.4); _gw.copy(car); _gw.y += 3.5; fov = 58;
+  }
+  camera.position.copy(_gsc);
+  if (R.shake > 0) { const s = R.shake * .12; camera.position.x += rand(-s, s); camera.position.y += rand(-s, s); R.shake = Math.max(0, R.shake - dt * 2.2); }
+  camera.up.set(0, 1, 0); camera.lookAt(_gw);
+  R.fov = C.shot !== C.fovShot ? fov : lerp(R.fov, fov, 1 - Math.exp(-dt * 6)); C.fovShot = C.shot; camera.fov = R.fov; camera.updateProjectionMatrix(); R.camOff = null;
+}
+// the gunner's view: behind and above the gun house, along the barrel at the target. Returns false when not fighting.
+function gusGunCamera(C, dt) {
+  const R = race, G = GS, M = gusTrain(); if (!G || G.ph !== 'fight' || !M || !M.gus.pivot) return false;
+  const piv = M.gus.pivot; piv.updateWorldMatrix(true, true);
+  const root = piv.localToWorld(_gw.set(0, 0, 0)).clone(), mz = piv.localToWorld(_gv.set(0, 0, GUN.LEN)), dir = _gu.copy(mz).sub(root).normalize();
+  const hd = dir.clone().setY(0).normalize();
+  const want = root.clone().addScaledVector(hd, -12).addScaledVector(new THREE.Vector3(-hd.z, 0, hd.x), 2.6); want.y += 6.4;
+  if (!C.gp || C.gunT !== G) { C.gp = want.clone(); C.gunT = G; } else C.gp.lerp(want, 1 - Math.exp(-dt * 6));
+  const look = mz.clone().addScaledVector(dir, 60); if (G.target) look.lerp(G.target.g.position, .3); look.y -= 9;
+  if (!C.gl) C.gl = look.clone(); else C.gl.lerp(look, 1 - Math.exp(-dt * 7));
+  camera.position.copy(C.gp);
+  if (window.__gusDbg) { const w = M.gus.wrap; w.updateWorldMatrix(true, true); const c = w.localToWorld(new THREE.Vector3(0, 0, 0)); camera.position.copy(w.localToWorld(new THREE.Vector3(window.__gusDbg * 160, 60, 60))); C.gl.copy(c); }
+  if (R.shake > 0) { const s = R.shake * .16; camera.position.x += rand(-s, s); camera.position.y += rand(-s, s); R.shake = Math.max(0, R.shake - dt * 2.4); }
+  camera.up.set(0, 1, 0); camera.lookAt(C.gl);
+  R.fov = lerp(R.fov, 58, 1 - Math.exp(-dt * 5)); camera.fov = R.fov; camera.updateProjectionMatrix(); R.camOff = null;
+  return true;
+}
+// a tap (or click) during the fight fires rather than skipping the film
+function gusTap() { if (GS && GS.ph === 'fight' && race && race.ride && race.ride.gun === GS) { GS.tap = true; return true; } return false; }
+
+/* ============================ THE UNDERPASS ============================ */
+// Past the crystal chamber the cave road runs into a lined road tunnel, and the police have closed it: a roadblock
+// across all three lanes. A kicker in the right lane throws the car up onto the tunnel wall, and it drives along the
+// wall, sideways, flat out at 420 km/h for five seconds, right over the police. It drops off the wall behind a getaway
+// truck with its door down, drives up into the trailer and spins round. Out of the cave a second roadblock stops the
+// truck: it slews round 180 degrees, lifts the front of its trailer, drops the door, and the car launches out over the
+// police cars and away into the forest. A film from start to end. x = distance along the road from the kicker's foot.
+const TUN = (() => {
+  const VW = 420 / 3.6 * SPEED_SCALE, T = { VW, VT: 40, VT2: 58, WALLD: 18.12, WALL_H: 3.1, KICK: 26, KICK_H: 2.4, WALL0: 44, WALL1: 44 + 5 * VW, DROP: 62,
+    BLOCK1: 125, FLOOR: 1.35, DL: 3.0, TWID: 3.4, KP: 6.5, RZ: -14.5, TILT: .2, FLY: 84, VL: 40, CEIL: 8.6, WH: 7.5, WD: 18.2 };
+  T.ENTER = T.WALL1 + T.DROP + 10; T.RAMP = -Math.asin(T.FLOOR / T.DL); return T;
+})();
+let TS = null;
+// the lined stretch of the cave road: [start, end]
+function tunLined(G) { const c = G.ranges.find(r => r.key === 'cave'); if (!c) return [0, 0]; const s0 = lerp(c.a, c.b, .62) + 90; return [s0 - 30, c.b - 12]; }
+
+function buildUnderpass(W) {
+  const { main, kit, G } = W, T = TUN, H = MAIN_HW, lanes = lanesFor(H);
+  const cave = G.ranges.find(r => r.key === 'cave'); if (!cave) return null;
+  const [sA, sB] = tunLined(G), s0 = sA + 30;
+  const root = new THREE.Group(); W.root.add(root);
+  const film = new THREE.Group(); film.visible = false; root.add(film); // only shown while the film runs
+  const basic = (map, c = 1, o = {}) => new THREE.MeshBasicMaterial({ map, color: new THREE.Color(c, c, c), side: THREE.DoubleSide, ...o });
+  const mid = frameAt(main, (sA + sB) / 2).pos.clone(), R2 = ((sB - sA) / 2 + 900) ** 2;
+
+  // ---------- the lining: white-tiled walls, a dark ceiling, walkways, lamp lines ----------
+  const wallTex = canvasTex(256, 512, (g, w, h) => { // x: foot of the wall (0) to the top (7.5 m); y: 24 m along the tunnel
+    const gr = g.createLinearGradient(0, 0, w, 0);
+    gr.addColorStop(0, '#3f4449'); gr.addColorStop(.155, '#51575d'); gr.addColorStop(.17, '#aab5bd'); gr.addColorStop(.5, '#d3dce2'); gr.addColorStop(.72, '#f2f6f8'); gr.addColorStop(.78, '#e9eef1'); gr.addColorStop(.84, '#a3abb2'); gr.addColorStop(1, '#4d5358');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(30,40,50,.22)'; g.lineWidth = 1;
+    for (let x = .17 * w; x < .84 * w; x += 10.5) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+    for (let y = 0; y < h; y += 10.5) { g.beginPath(); g.moveTo(.17 * w, y); g.lineTo(.84 * w, y); g.stroke(); }
+    for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(0,0,0,${rand(.02, .07)})`; g.fillRect(rand(0, w), rand(0, h), rand(2, 9), rand(2, 9)); } // grime
+    const soot = g.createLinearGradient(0, 0, w * .3, 0); soot.addColorStop(0, 'rgba(0,0,0,.35)'); soot.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = soot; g.fillRect(0, 0, w * .3, h);
+    g.fillStyle = 'rgba(15,18,22,.6)'; for (let y = 0; y < h; y += h / 8) g.fillRect(0, y, w, 3); // panel joints every 3 m
+    g.fillStyle = '#f2b800'; g.fillRect(.13 * w, 0, .03 * w, h); g.fillStyle = '#111'; for (let y = -20; y < h; y += 20) { g.beginPath(); g.moveTo(.13 * w, y); g.lineTo(.16 * w, y + 6); g.lineTo(.16 * w, y + 16); g.lineTo(.13 * w, y + 10); g.closePath(); g.fill(); }
+    // an SOS niche and a reflector post every 24 m
+    g.fillStyle = '#0b3d91'; g.fillRect(.19 * w, h * .44, .15 * w, h * .12); g.fillStyle = '#fff'; g.fillRect(.25 * w, h * .47, .03 * w, h * .06); g.fillRect(.225 * w, h * .49, .08 * w, h * .02);
+    g.fillStyle = '#ff5a1a'; for (let y = h * .1; y < h; y += h / 4) g.fillRect(.09 * w, y, .025 * w, 6);
+  });
+  wallTex.wrapT = THREE.RepeatWrapping;
+  const wallM = basic(wallTex, 1.08);
+  for (const sd of [-1, 1]) root.add(new THREE.Mesh(ribbon(main, sA, sB, () => sd * T.WD, u => u * T.WH, 2, 1), wallM));
+  const ceilTex = canvasTex(256, 256, (g, w, h) => { // across: left chamfer, flat roof, right chamfer
+    g.fillStyle = '#2a2e33'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 500; i++) { g.fillStyle = `rgba(0,0,0,${rand(.05, .2)})`; g.fillRect(rand(0, w), rand(0, h), rand(3, 14), rand(3, 14)); }
+    g.fillStyle = 'rgba(255,255,255,.05)'; for (let y = 0; y < h; y += h / 8) g.fillRect(0, y, w, 2);
+    for (const x of [.33, .67]) { g.fillStyle = '#16191c'; g.fillRect(x * w - 3, 0, 6, h); }
+    g.fillStyle = '#4a5058'; for (const x of [.45, .55]) g.fillRect(x * w - 2, 0, 4, h);
+  });
+  ceilTex.wrapT = THREE.RepeatWrapping;
+  const CD = [-T.WD, -15, 15, T.WD], CY = [T.WH, T.CEIL, T.CEIL, T.WH];
+  root.add(new THREE.Mesh(ribbon(main, sA, sB, u => CD[Math.round(u * 3)], u => CY[Math.round(u * 3)], 4, 1), basic(ceilTex, 1)));
+  const walkTex = canvasTex(64, 256, (g, w, h) => { g.fillStyle = '#6a6e72'; g.fillRect(0, 0, w, h); for (let i = 0; i < 300; i++) { const v = rand(80, 140) | 0; g.fillStyle = `rgba(${v},${v},${v},.4)`; g.fillRect(rand(0, w), rand(0, h), 2, 2); } g.fillStyle = '#e8e8e2'; g.fillRect(0, 0, 6, h); g.fillStyle = 'rgba(0,0,0,.4)'; for (let y = 0; y < h; y += 32) g.fillRect(0, y, w, 2); });
+  walkTex.wrapT = THREE.RepeatWrapping;
+  for (const sd of [-1, 1]) { const WD = [H, H, T.WD], WY = [0, .35, .35]; root.add(new THREE.Mesh(ribbon(main, sA, sB, u => sd * WD[Math.round(u * 2)], u => WY[Math.round(u * 2)], 3, 1), basic(walkTex, .7))); }
+  const lampTex = canvasTex(16, 256, (g, w, h) => { g.clearRect(0, 0, w, h); for (let y = 0; y < h; y += 32) { g.fillStyle = '#fff'; g.fillRect(0, y + 3, w, 22); } }, false);
+  lampTex.wrapT = THREE.RepeatWrapping;
+  const lampM = new THREE.MeshBasicMaterial({ map: lampTex, color: new THREE.Color(3.4, 3.0, 2.3), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  for (const sd of [-1, 1]) root.add(new THREE.Mesh(ribbon(main, sA, sB, () => sd * (T.WD - .06), u => lerp(5.45, 5.75, u), 2, 1, 8), lampM));
+  for (const d of [-3.4, 3.4]) root.add(new THREE.Mesh(ribbon(main, sA, sB, u => d + lerp(-.12, .12, u), () => T.CEIL - .04, 2, 1, 8), lampM));
+  // jet fans, exit signs, lane signals
+  const fanM = new THREE.MeshBasicMaterial({ color: '#7d848b' }), fanIn = new THREE.MeshBasicMaterial({ color: '#111417' });
+  const exitM = basic(canvasTex(256, 96, (g, w, h) => { g.fillStyle = '#0c8a3e'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.font = '800 58px "Chakra Petch", sans-serif'; g.textBaseline = 'middle'; g.fillText('EXIT', 24, h / 2 + 2); g.beginPath(); g.moveTo(190, 26); g.lineTo(232, 48); g.lineTo(190, 70); g.closePath(); g.fill(); }), 1.8);
+  const xM = new THREE.MeshBasicMaterial({ map: canvasTex(64, 64, (g, w, h) => { g.fillStyle = '#000'; g.fillRect(0, 0, w, h); g.strokeStyle = '#ff2a1a'; g.lineWidth = 9; g.beginPath(); g.moveTo(12, 12); g.lineTo(52, 52); g.moveTo(52, 12); g.lineTo(12, 52); g.stroke(); }), color: new THREE.Color(2.6, 2.6, 2.6) });
+  for (let s = sA + 50; s < sB - 20; s += 150) { const g = kit.anchor(s, true); root.add(g);
+    for (const x of [-6.5, 6.5]) { const c = new THREE.Mesh(new THREE.CylinderGeometry(.8, .8, 4.4, 16, 1, true).rotateX(Math.PI / 2), fanM); c.position.set(x, T.CEIL - 1.05, 0); g.add(c); for (const z of [-2.1, 2.1]) { const d = new THREE.Mesh(new THREE.CircleGeometry(.78, 16), fanIn); d.position.set(x, T.CEIL - 1.05, z); g.add(d); } kit.box(.1, .6, .1, fanM, x, T.CEIL - .3, 0, g); } }
+  for (let s = sA + 90; s < sB - 20; s += 110) { const g = kit.anchor(s, true); root.add(g); for (const sd of [-1, 1]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.6, .6), exitM); m.position.set(-sd * (T.WD - .05), 2.6, 0); m.rotation.y = sd * Math.PI / 2; g.add(m); } }
+  const xs = []; for (const s of [s0 - 20, s0 + 60]) { const g = kit.anchor(s, true); root.add(g); kit.box(2 * H, .3, .3, fanM, 0, T.CEIL - 1.4, 0, g); for (const d of lanes) { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.3), xM); m.position.set(-d, T.CEIL - 2.2, -.2); m.rotation.y = Math.PI; g.add(m); xs.push(m); } }
+  // portal faces at both ends of the lining, filling the cave around it
+  const faceTex = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#6c6a66'; g.fillRect(0, 0, w, h); for (let x = 0; x < w; x += 16) { g.fillStyle = `rgba(0,0,0,${rand(.05, .16)})`; g.fillRect(x, 0, 2, h); } for (let i = 0; i < 800; i++) { const v = rand(70, 140) | 0; g.fillStyle = `rgba(${v},${v},${v},.3)`; g.fillRect(rand(0, w), rand(0, h), rand(1, 4), rand(1, 4)); } });
+  faceTex.wrapS = faceTex.wrapT = THREE.RepeatWrapping; faceTex.repeat.set(.12, .12);
+  const faceM = basic(faceTex, .75);
+  for (const [s, dir] of [[sA, 1]]) { // (the far end opens straight into the cave mouth)
+    const outer = []; for (let k = 0; k <= 40; k++) { const a = Math.PI * k / 40; outer.push(new THREE.Vector2(Math.cos(a) * 26, -1.5 + Math.sin(a) * 19.5)); }
+    const sh = new THREE.Shape(outer); sh.holes.push(new THREE.Path([[-T.WD, -.3], [-T.WD, T.WH], [-15, T.CEIL], [15, T.CEIL], [T.WD, T.WH], [T.WD, -.3]].map(([x, y]) => new THREE.Vector2(x, y))));
+    const g = kit.anchor(s, true); root.add(g); g.add(new THREE.Mesh(new THREE.ShapeGeometry(sh, 4), faceM));
+    kit.box(2 * T.WD + 2, .8, .6, fanM, 0, T.CEIL + .4, -dir * .3, g);
+    if (dir > 0) { const sign = new THREE.Mesh(new THREE.PlaneGeometry(26, 2.4), basic(canvasTex(1024, 96, (c, w, h) => { c.fillStyle = '#101418'; c.fillRect(0, 0, w, h); c.fillStyle = '#ffd24a'; c.font = '800 62px "Chakra Petch", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('UNDERPASS 7  ·  POLICE CHECKPOINT', w / 2, h / 2 + 3); }), 1.6));
+      sign.position.set(0, T.CEIL + 2.2, -.4); sign.rotation.y = Math.PI; g.add(sign); }
+  }
+
+  // ---------- the kicker in the right lane, banked towards the wall ----------
+  { const g = kit.anchor(s0); film.add(g); const rg = new THREE.Group(); rg.position.x = -lanes[2]; rg.rotation.z = -.22; g.add(rg); kit.rampMesh(rg, T.KICK, T.KICK_H, 4.4);
+    kit.box(4.4, .25, 1.2, kit.steel, 0, T.KICK_H - .12, T.KICK + .6, rg);
+    for (let k = 1; k <= 3; k++) { const c = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 3.4), new THREE.MeshBasicMaterial({ map: kit.chevTex, color: new THREE.Color(1.6, 1.6, 1.6), transparent: true, opacity: .9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 })); c.rotation.x = -Math.PI / 2; c.position.set(-lanes[2], .05, -k * 9); g.add(c); } }
+
+  // ---------- police props for the two roadblocks ----------
+  const cops = []; for (let k = 0; k < 8; k++) { const c = makeCop(W, 30 + k); c.mesh.visible = false; cops.push(c); }
+  const jersey = new THREE.MeshStandardMaterial({ color: '#b9b4ab', roughness: .9 });
+  const blk1 = new THREE.Group(); film.add(blk1);
+  { const g = kit.anchor(s0 + T.BLOCK1, true); blk1.add(g);
+    for (const d of [-5.3, 5.3, -14.6, 14.6]) { kit.box(3.2, 1.0, .6, jersey, -d, .5, 3, g); kit.box(3.2, .18, .62, kit.stripe, -d, .82, 3, g); }
+    for (const d of [-8, 0, 8]) { kit.box(2.4, .12, .12, kit.stripe, -d, 1.05, 6, g); for (const sx of [-1, 1]) kit.box(.08, 1.1, .5, kit.darkSteel, -d + sx * 1.1, .55, 6, g); const a = new THREE.Mesh(new THREE.SphereGeometry(.12, 8, 6), kit.amber()); a.position.set(-d, 1.25, 6); g.add(a); }
+    const wash = new THREE.Mesh(new THREE.PlaneGeometry(2 * H, 16), new THREE.MeshBasicMaterial({ map: glowTex, color: new THREE.Color(1.2, .2, .5), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 })); wash.rotation.x = -Math.PI / 2; wash.position.set(0, .07, 0); g.add(wash); }
+  const blk2 = new THREE.Group(); film.add(blk2); const spikes = new THREE.Group(); blk2.add(spikes);
+  { const sp = new THREE.MeshStandardMaterial({ color: '#2a2c30', metalness: .8, roughness: .35 }); for (const d of [-7, 7]) { kit.box(12, .08, .45, sp, -d, .04, -9, spikes); for (let x = -5.8; x <= 5.8; x += .4) kit.box(.05, .18, .05, MAT.chrome, -d + x, .14, -9, spikes); } }
+
+  // ---------- the getaway truck: a lift trailer with a drop-down door ----------
+  const TG = new THREE.Group(); TG.visible = false; root.add(TG);
+  const TR = new THREE.Group(); TR.position.set(0, T.FLOOR, T.KP); TG.add(TR);
+  const DG = new THREE.Group(); DG.position.set(0, 0, T.RZ); TR.add(DG);
+  const livTex = canvasTex(1024, 200, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#2b2f36'); gr.addColorStop(1, '#16181c'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(255,255,255,.06)'; g.lineWidth = 2; for (let x = 0; x < w; x += 22) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+    g.fillStyle = '#ff6a13'; g.fillRect(0, h * .78, w, h * .07); g.fillStyle = '#ffb000'; g.fillRect(0, h * .87, w, h * .03);
+    g.font = 'italic 900 96px "Saira Condensed", Impact, sans-serif'; g.textBaseline = 'middle'; g.fillStyle = '#f2f3f5'; g.fillText('NIGHT', 60, h * .42); g.fillStyle = '#ff6a13'; g.fillText('RUNNER', 300, h * .42);
+    g.font = '700 26px "Chakra Petch", sans-serif'; g.fillStyle = '#9aa0a8'; g.fillText('SPECIAL CARGO · NO QUESTIONS ASKED', 64, h * .66);
+  });
+  const lvM = new THREE.MeshStandardMaterial({ map: livTex, roughness: .35, metalness: .45 }), shellM = new THREE.MeshStandardMaterial({ color: '#1e2126', roughness: .45, metalness: .7 });
+  const inTex = canvasTex(256, 128, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#f4f1e8'); gr.addColorStop(.3, '#c9cdd1'); gr.addColorStop(1, '#6b7076'); g.fillStyle = gr; g.fillRect(0, 0, w, h); for (let x = 0; x < w; x += 12) { g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(x, 0, 3, h); g.fillStyle = 'rgba(255,255,255,.2)'; g.fillRect(x + 3, 0, 2, h); } g.fillStyle = '#d43a1a'; g.fillRect(0, h * .55, w, 5); for (let x = 30; x < w; x += 64) { g.fillStyle = '#333'; g.fillRect(x, h * .5, 10, 14); } });
+  inTex.wrapS = THREE.RepeatWrapping; inTex.repeat.set(5, 1);
+  const treadTex = canvasTex(128, 256, (g, w, h) => { g.fillStyle = '#5b6168'; g.fillRect(0, 0, w, h); for (let y = 0; y < h; y += 12) for (let x = (y / 12) % 2 * 6; x < w; x += 12) { g.fillStyle = 'rgba(255,255,255,.26)'; g.fillRect(x, y, 7, 2); g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(x, y + 2, 7, 2); } g.fillStyle = '#f2c200'; g.fillRect(0, 0, 6, h); g.fillRect(w - 6, 0, 6, h); });
+  treadTex.wrapT = THREE.RepeatWrapping; treadTex.repeat.set(1, 5);
+  const LEN = -T.RZ + 1.5, ZC = T.RZ + LEN / 2, HT = 3.1;
+  kit.box(T.TWID, .16, LEN, shellM, 0, -.08, ZC, TR);
+  { const fl = new THREE.Mesh(new THREE.PlaneGeometry(T.TWID - .1, LEN), basic(treadTex, 1.05)); fl.rotation.x = -Math.PI / 2; fl.position.set(0, .01, ZC); TR.add(fl); }
+  const inM = basic(inTex, 1.1);
+  for (const sx of [-1, 1]) { kit.box(.06, HT, LEN, lvM, sx * T.TWID / 2, HT / 2, ZC, TR); const w = new THREE.Mesh(new THREE.PlaneGeometry(LEN, HT), inM); w.position.set(sx * (T.TWID / 2 - .05), HT / 2, ZC); w.rotation.y = -sx * Math.PI / 2; TR.add(w);
+    for (let z = T.RZ + 1; z < 1.2; z += 2.5) { const m = new THREE.Mesh(new THREE.BoxGeometry(.05, .1, .18), kit.amber()); m.position.set(sx * (T.TWID / 2 + .04), HT - .15, z); TR.add(m); } }
+  kit.box(T.TWID + .08, .08, LEN, shellM, 0, HT + .04, ZC, TR);
+  { const c = new THREE.Mesh(new THREE.PlaneGeometry(T.TWID - .1, LEN), basic(null, .35)); c.rotation.x = Math.PI / 2; c.position.set(0, HT - .03, ZC); TR.add(c);
+    const lm = new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3.7, 3.1) }); for (const x of [-.8, .8]) kit.box(.12, .05, LEN - 1.5, lm, x, HT - .08, ZC, TR); }
+  kit.box(T.TWID, HT, .08, shellM, 0, HT / 2, 1.5, TR);
+  { const w = new THREE.Mesh(new THREE.PlaneGeometry(T.TWID - .1, HT), inM); w.position.set(0, HT / 2, 1.44); w.rotation.y = Math.PI; TR.add(w); }
+  for (const sx of [-1, 1]) kit.box(.14, HT + .1, .14, kit.steel, sx * (T.TWID / 2 + .02), HT / 2, T.RZ, TR);
+  kit.box(T.TWID + .12, .22, .14, kit.steel, 0, HT, T.RZ, TR); kit.box(1.1, .3, LEN - .5, kit.darkSteel, 0, -.3, ZC, TR);
+  const doorOut = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#23272d'; g.fillRect(0, 0, w, h); g.strokeStyle = '#3d434b'; g.lineWidth = 8; g.strokeRect(10, 10, w - 20, h - 20); for (let x = -64; x < w + 64; x += 40) { g.fillStyle = (x / 40) % 2 ? '#e8e8e8' : '#d11c1c'; g.beginPath(); g.moveTo(x, h - 40); g.lineTo(x + 20, h - 40); g.lineTo(x + 40, h - 10); g.lineTo(x + 20, h - 10); g.closePath(); g.fill(); } g.fillStyle = '#ff6a13'; g.font = 'italic 900 40px "Saira Condensed", Impact, sans-serif'; g.textAlign = 'center'; g.fillText('NIGHT RUNNER', w / 2, h * .45); });
+  { const m = [kit.steel, kit.steel, basic(treadTex, 1), new THREE.MeshStandardMaterial({ map: doorOut, roughness: .5, metalness: .4 }), kit.steel, kit.steel];
+    const d = new THREE.Mesh(new THREE.BoxGeometry(T.TWID - .12, .1, T.DL), m); d.position.set(0, .05, -T.DL / 2); DG.add(d);
+    for (const sx of [-1, 1]) kit.box(.1, .16, T.DL, kit.stripe, sx * (T.TWID / 2 - .12), .12, -T.DL / 2, DG); }
+  kit.cab(TG, 8.3, '#e8e9ec'); kit.box(1.4, .35, 3.4, kit.darkSteel, 0, 1.05, 7.3, TG); kit.wheels(TG, [-5.9, -4.6], 1.22);
+  kit.box(2.6, .15, .15, kit.darkSteel, 0, .62, -7.9, TG);
+  const tailM = new THREE.MeshBasicMaterial({ color: new THREE.Color(6, .15, .1) });
+  for (const sx of [-1, 1]) { kit.box(.34, .14, .05, tailM, sx * 1.3, .95, -7.98, TG); const tl = kit.glow(new THREE.Color(3, .1, .05), 1.6); tl.position.set(sx * 1.3, .95, -8.1); TG.add(tl);
+    const hl = kit.glow(new THREE.Color(3, 2.8, 2.4), 3.2); hl.position.set(sx * .95, 1.05, 12.75); TG.add(hl); kit.box(.5, .7, .06, MAT.black, sx * 1.05, .75, -7.3, TG); }
+
+  const vis = { film: false };
+  function reset() { film.visible = false; TG.visible = false; blk2.visible = false; for (const c of cops) c.mesh.visible = false; vis.film = false; }
+  // police cars in a roadblock: [s, d, heading] each; heading relative to the road
+  function placeCops(list, from) { list.forEach(([s, d, h], k) => { const c = cops[from + k]; if (!c) return; poseOnRoute(c.mesh, W.routes[0], s, d, h); const m = c.mesh.userData.model; m.rotation.set(0, 0, 0); m.position.y = 0; c.mesh.visible = true; }); }
+  function block1(on) { if (on) placeCops([[s0 + T.BLOCK1, lanes[0], .55], [s0 + T.BLOCK1 + 1.5, lanes[1], -.5], [s0 + T.BLOCK1, lanes[2], .6]], 0); else for (let k = 0; k < 3; k++) cops[k].mesh.visible = false; }
+  function block2(s) { placeCops([[s, -12.2, .75], [s + 1, -5.4, -.6], [s + 2.2, 1.2, .5], [s + .6, 7.6, -.7], [s - .4, 13.2, .8]], 3); frameAt(main, s, _uf); blk2.position.copy(_uf.pos); blk2.quaternion.setFromRotationMatrix(_um.makeBasis(_ul.crossVectors(_uup, _uf.fwd).normalize(), _uup, _uf.fwd)); blk2.visible = true; }
+  function anim(t) {
+    root.visible = camera.position.distanceToSquared(mid) < R2 || vis.film;
+    const on = (t * 3) % 1 < .5; for (const m of xs) m.visible = on || !vis.film;
+    for (let k = 0; k < cops.length; k++) { const c = cops[k]; if (!c.mesh.visible) continue; const l = c.lights, a = ((t * 3.2 + k * .37) % 1) < .5;
+      l.redM.color.copy(a ? l.red : _udim); l.blueM.color.copy(a ? _udim : l.blue); l.rs.visible = a; l.bs.visible = !a; l.wash.material.color.setRGB(a ? 2 : .1, .1, a ? .1 : 2.2); }
+  }
+  return { s0, sA, sB, root, film, TG, TR, DG, cops, blk1, blk2, reset, block1, block2, anim, show(on) { vis.film = on; film.visible = on; TG.visible = on; if (!on) { blk2.visible = false; for (const c of cops) c.mesh.visible = false; } } };
+}
+const _uf = newFrame(), _uf2 = newFrame(), _um = new THREE.Matrix4(), _ul = new THREE.Vector3(), _uu = new THREE.Vector3(), _uup = new THREE.Vector3(0, 1, 0), _uq = new THREE.Quaternion(), _uq2 = new THREE.Quaternion(), _uv = new THREE.Vector3(), _uw = new THREE.Vector3(), _uc = new THREE.Vector3(), _uk = new THREE.Vector3(), _udim = new THREE.Color(.25, .03, .05), UX = new THREE.Vector3(1, 0, 0), UZ = new THREE.Vector3(0, 0, 1);
+
+function tunInit() {
+  const R = race, W = R.world;
+  if (!W.G) { TS = { R, off: true }; return; }
+  if (W._tun === undefined) W._tun = buildUnderpass(W);
+  if (!W._tun) { TS = { R, off: true }; return; }
+  W._tun.reset(); TS = { R, B: W._tun, ph: "idle", te: 0 };
+}
+// the road basis at s (local +z forward, +x left), turned by yaw about the up axis and rolled about the forward axis
+function tunBasis(s, yaw, roll, pitch, out) {
+  frameAt(race.world.main, s, _uf2); _ul.crossVectors(_uup, _uf2.fwd).normalize(); _uu.crossVectors(_uf2.fwd, _ul).normalize(); _um.makeBasis(_ul, _uu, _uf2.fwd);
+  out.setFromRotationMatrix(_um); if (yaw) out.multiply(_uq2.setFromAxisAngle(_uup, yaw)); if (roll) out.multiply(_uq2.setFromAxisAngle(UZ, roll)); if (pitch) out.multiply(_uq2.setFromAxisAngle(UX, pitch)); return out;
+}
+function tunX() { const P = race.player, L = race.world.main.L; let x = P.s - TS.B.s0; if (x < -L / 2) x += L; if (x > L / 2) x -= L; return x; }
+function tunShot(C, name) { if (C.shot !== name) { C.shot = name; C.shotT = C.t; C.cam = null; } }
+function tunClearTraffic(from, to) {
+  const R = race, P = R.player, L = R.world.main.L;
+  for (const t of R.world.traffic) { if (t.knock > 0) continue; const ds = ((t.s - P.s) % L + L) % L; if (ds < to || ds > L - from) { t.s = (P.s + to + 60 + rand(0, 400)) % L; t.cv = t.v; } }
+}
+function tunStart() {
+  const R = race, P = R.player, B = TS.B;
+  if (R.cine) endCine();
+  R.cine = { type: 'tun', t: 0, dur: 1e9, shot: 'approach', shotT: 0, tsv: 1 };
+  TS.ph = 'pre'; B.show(true); B.block1(true);
+  $('cineLabel').innerHTML = '';
+  $('movieTitle').innerHTML = '<b>The Underpass</b><small>Police roadblock ahead · no way through</small>';
+  const hud = $('hud'); hud.classList.add('cine', 'movie'); Sound.whoosh(.55, 1.8); Sound.blip(620, .5, 'sawtooth', .06);
+  tunClearTraffic(80, 1500);
+  for (const c of R.cops || []) respawnCop(c, 700 + c.copI * 40);
+  P.nitroOn = false; P.drifting = false;
+}
+function tunEnd() {
+  const R = race, B = TS.B;
+  if (R.cine && R.cine.type === 'tun') { R.camOff = camera.position.clone().sub(R.player.mesh.position); endCine(); }
+  camera.up.set(0, 1, 0); B.film.visible = false; B.TG.visible = false; B.block1(false);
+}
+// before the racers move: the story, and the speeds the film needs
+function tunStep(dt) {
+  const R = race; if (!R || !R.world) return;
+  if (!TS || TS.R !== R) tunInit();
+  if (TS.off) return;
+  const B = TS.B, P = R.player, T = TUN;
+  B.anim(performance.now() / 1000);
+  if (TS.ph === 'idle') {
+    if (R.state !== 'race' || P.route >= 0) return;
+    const x = tunX(), free = !R.ride && P.wreck <= 0 && !R.finale && !P.jump && (!R.cine || R.cine.type === 'lane');
+    if (free && x > -440 && x < -300) tunStart();
+    return;
+  }
+  if (TS.ph === 'done') { if (B.blk2.visible && Math.abs(P.s - TS.sBlk) > 700) B.show(false); return; }
+  const C = R.cine && R.cine.type === 'tun' ? R.cine : null;
+  if (!C || R.state !== 'race') { tunEnd(); B.show(false); TS.ph = 'done'; return; }
+  input.laneTap = 0; P.wreck = 0; P.airY = 0;
+  tunClearTraffic(60, 1100);
+  if (TS.ph === 'pre') {
+    const x = tunX();
+    P.v = T.VW; P.lane = x < T.WALL1 ? 2 : 1;
+    tunShot(C, x < -150 ? 'approach' : x < -18 ? 'block1' : x < T.KICK + 3 ? 'ramp' : x < T.WALL0 + 26 ? 'launch' : x < T.BLOCK1 + 40 ? 'wall1' : x < T.WALL0 + 290 ? 'wall2' : x < T.WALL1 - 40 ? 'wall3' : 'drop');
+    if (x > T.KICK && !TS.kicked) { TS.kicked = 1; Sound.whoosh(.7, 1); const tag = $('laneTag'); tag.textContent = 'On the wall · 420 km/h'; tag.className = ''; void tag.offsetWidth; tag.className = 'show'; R.shake = .5; }
+    if (x > T.WALL0 + 330) B.block1(false);
+    if (x >= T.ENTER) { // up the door ramp into the trailer
+      TS.ph = 'truck'; TS.te = 0; TS.sTc = TS.preTc; TS.psi = 0; TS.tilt = 0; TS.relZ = -2.7; TS.spin = 0; TS.door = T.RAMP; B.block1(false);
+      tunShot(C, 'enter'); Sound.hit(.8, 260); R.shake = .6;
+      for (const c of R.cops || []) respawnCop(c, 900 + c.copI * 40);
+    }
+  }
+  if (TS.ph === 'truck') {
+    const te = (TS.te += dt);
+    const vT = te < 3.9 ? lerp(T.VT, T.VT2, smooth(.45, 2.6, te)) : T.VT2 * Math.max(0, 1 - (te - 3.9) / 1.7);
+    TS.sTc += vT * dt; TS.vT = vT;
+    TS.psi = Math.PI * smooth(3.9, 5.6, te); TS.tilt = T.TILT * smooth(5.6, 6.3, te);
+    TS.door = te < 5.7 ? lerp(T.RAMP, Math.PI / 2, smooth(.6, 1.8, te)) : lerp(Math.PI / 2, 0, smooth(5.8, 6.5, te));
+    if (te < .45) { const u = te / .45; TS.relZ = -2.7 + 13.2 * (1 - (1 - u) * (1 - u)); } else if (te < 6.6) TS.relZ = 10.5; else { const tL = te - 6.6; TS.relZ = 10.5 - 30 * tL * tL; }
+    TS.spin = Math.PI * smooth(.1, .45, te);
+    P.v = te < 6.6 ? vT : 60 * (te - 6.6); P.lane = 1; P.d = 0;
+    if (te > 2.6 && !TS.sBlk) { // the second roadblock, just where the truck will come to rest once it has slewed round
+      TS.sBlk = TS.sTc + T.VT2 * (3.9 - te) + T.VT2 * 1.7 / 2 + 34; B.block2(TS.sBlk);
+      $('movieTitle').innerHTML = '<b>Roadblock</b><small>They have the road out of the cave closed</small>'; const hud = $('hud'); hud.classList.remove('movie'); void hud.offsetWidth; hud.classList.add('movie');
+      Sound.blip(520, .6, 'sawtooth', .07);
+    }
+    if (te > 3.9 && !TS.slewed) { TS.slewed = 1; Sound.whoosh(.6, 1.6); }
+    if (te > 5.8 && !TS.opened) { TS.opened = 1; const tag = $('laneTag'); tag.textContent = 'Door down · floor it'; tag.className = ''; void tag.offsetWidth; tag.className = 'show'; Sound.hit(.6, 200); }
+    tunShot(C, te < .5 ? 'enter' : te < 2.6 ? 'hold' : te < 3.9 ? 'block' : te < 5.6 ? 'spin' : 'open');
+    // tyre smoke off the truck as it slews round
+    if (te > 3.9 && te < 5.8 && B.TG.visible) { const W = R.world; for (const z of [-5.9, -4.6, 8.8, 11.7]) for (const sx of [-1, 1]) if (Math.random() < .5) { _uv.set(sx * 1.25, .4, z); B.TG.localToWorld(_uv); W.smoke.spawn(_uv.x, _uv.y, _uv.z, rand(-2, 2), rand(.6, 2), rand(-2, 2), .78, .78, .8, 2.2, 1.8, 5, .5); } }
+    if (TS.relZ <= -T.DL) { // off the lip
+      B.TR.updateWorldMatrix(true, false); _uv.set(0, 0, T.RZ - T.DL); B.TR.localToWorld(_uv);
+      frameAt(R.world.main, TS.sBlk - 34, _uf); const fw = _uf.fwd;
+      TS.sLip = TS.sBlk - 34 + (_uv.x - _uf.pos.x) * fw.x + (_uv.z - _uf.pos.z) * fw.z; frameAt(R.world.main, TS.sLip, _uf); TS.h0 = _uv.y - _uf.pos.y; TS.tF = 0;
+      TS.ph = 'fly'; tunShot(C, 'fly'); Sound.whoosh(.8, 1.2); R.shake = .4;
+    }
+  }
+  if (TS.ph === 'fly') {
+    TS.tF += dt; P.v = T.VL; P.lane = 1; P.d = 0;
+    const u = TS.tF * T.VL / T.FLY;
+    if (u > .7) tunShot(C, 'land');
+    if (u >= 1) { TS.ph = 'land'; TS.landT = C.t; R.shake = .8; Sound.hit(.8, 180);
+      const W = R.world, p = P.mesh.position; for (let k = 0; k < 24; k++) W.sparks.spawn(p.x, p.y + .3, p.z, rand(-8, 8), rand(1, 5), rand(-8, 8), 4, 2.2, .7, .3, rand(.3, .6), -.2, 1.2, 12);
+      P.nitro = Math.min(1, P.nitro + .3); P.laneRoute = -99;
+      pop('Roadblock jumped', 'var(--hot)', '+30% nitro');
+      const G = W.G, fr = G.ranges.find(r => r.a > TS.B.s0 - 10 && r.key !== 'cave'); if (fr && R.grand && !R.grand.shown[fr.i]) { R.grand.shown[fr.i] = 1; showBioTitle(fr.i); }
+    }
+  }
+  if (TS.ph === 'land') { P.lane = 1; if (C.t - TS.landT > 1.4) { tunEnd(); TS.ph = 'done'; } }
+}
+// car pose along the stunt before the truck: [d, h above the road, roll]
+function tunCarPre(x) {
+  const T = TUN, L2 = lanesFor(MAIN_HW)[2], e = u => u * u * (3 - 2 * u);
+  if (x < T.KICK) { const u = clamp(x / T.KICK, 0, 1); return [L2, T.KICK_H * u + .25 * u, -.22 * u, -Math.atan(T.KICK_H / T.KICK)]; }
+  if (x < T.WALL0) { const u = (x - T.KICK) / (T.WALL0 - T.KICK); return [lerp(L2, T.WALLD, e(u)), lerp(T.KICK_H + .25, T.WALL_H, u) + 1.4 * Math.sin(Math.PI * u), lerp(-.22, -Math.PI / 2, e(u)), lerp(-.09, 0, u)]; }
+  if (x < T.WALL1) return [T.WALLD, T.WALL_H + .35 * Math.sin((x - T.WALL0) / 45), -Math.PI / 2, 0];
+  if (x < T.WALL1 + T.DROP) { const u = (x - T.WALL1) / T.DROP; return [lerp(T.WALLD, 0, e(u)), Math.max(0, T.WALL_H * (1 - u) + 2.2 * Math.sin(Math.PI * u)), lerp(-Math.PI / 2, 0, e(clamp(u * 1.25, 0, 1))), 0]; }
+  return [0, 0, 0, 0];
+}
+function tunTruckPre(x) { const T = TUN; return T.ENTER + 2.7 + 8 + (x - T.ENTER) * T.VT / T.VW; } // truck centre, from the kicker
+// after the racers have moved: the car and the truck
+function tunPose(dt) {
+  if (!TS || TS.off || (TS.ph !== 'pre' && TS.ph !== 'truck' && TS.ph !== 'fly' && TS.ph !== 'land')) return;
+  const R = race, P = R.player, T = TUN, B = TS.B, W = R.world, main = W.main, model = P.mesh.userData.model;
+  // keep everyone else out of the shots
+  for (const r of R.racers) if (r !== P && Math.abs(r.s - P.s) < 450 && r.route < 0) r.mesh.visible = false;
+  for (const c of R.cops || []) if (Math.abs(c.s - P.s) < 450) c.mesh.visible = false;
+  // the truck
+  if (TS.ph === 'pre') { const x = tunX(); TS.preTc = B.s0 + tunTruckPre(x); TS.door = lerp(Math.PI / 2, T.RAMP, smooth(T.WALL1 - 170, T.WALL1 - 50, x)); }
+  const sTc = TS.ph === 'pre' ? TS.preTc : TS.sTc;
+  frameAt(main, sTc, _uf); B.TG.position.copy(_uf.pos); tunBasis(sTc, TS.ph === 'pre' ? 0 : TS.psi, 0, 0, B.TG.quaternion);
+  B.TR.rotation.x = TS.ph === 'pre' ? 0 : TS.tilt; B.DG.rotation.x = TS.door;
+  B.TG.updateMatrixWorld(true);
+  if (TS.ph === 'pre') {
+    const x = tunX(); if (x < 0) return;
+    if (x < T.ENTER) {
+      const [d, h, roll, pitch] = tunCarPre(x);
+      frameAt(main, P.s, _uf); P.mesh.position.copy(_uf.pos).addScaledVector(_uf.right, d); P.mesh.position.y += h;
+      tunBasis(P.s, 0, roll, pitch, P.mesh.quaternion); model.rotation.set(0, 0, 0); model.position.y = 0;
+      P.d = clamp(d, -14.5, 14.5);
+      if (x > T.WALL0 && x < T.WALL1 && Math.random() < .9) { const p = P.mesh.position; W.sparks.spawn(p.x + _uf.right.x * .3, p.y, p.z + _uf.right.z * .3, -_uf.fwd.x * 20 + rand(-3, 3), rand(-2, 3), -_uf.fwd.z * 20 + rand(-3, 3), 4, 2.3, .8, .3, rand(.2, .45), -.3, 1.4, 10); }
+      return;
+    }
+  }
+  if (TS.ph === 'pre' || TS.ph === 'truck') { // in (or on the door of) the trailer
+    const rz = TS.relZ ?? -2.7, door = TS.door;
+    if (rz >= 0) _uv.set(0, 0, T.RZ + rz); else { const r = -rz; _uv.set(0, r * Math.sin(door), T.RZ - r * Math.cos(door)); }
+    B.TR.localToWorld(_uv); P.mesh.position.copy(_uv);
+    B.TR.getWorldQuaternion(P.mesh.quaternion); if (rz < 0) P.mesh.quaternion.multiply(_uq.setFromAxisAngle(UX, door)); P.mesh.quaternion.multiply(_uq.setFromAxisAngle(_uup, TS.spin || 0));
+    model.rotation.set(0, 0, 0); model.position.y = 0;
+    // the car's place along the road follows the truck
+    const zl = T.KP + (T.RZ + rz) * Math.cos(TS.tilt || 0), ns = sTc + zl * Math.cos(TS.psi || 0);
+    P.dist += ns - P.s; P.s = ns; P.d = 0;
+    if (TS.ph === 'truck' && TS.te < .5 && Math.random() < .9) { const p = P.mesh.position; W.sparks.spawn(p.x, p.y + .2, p.z, rand(-3, 3), rand(1, 4), rand(-3, 3), 4, 2.2, .7, .3, rand(.2, .5), -.2, 1.2, 12); }
+    return;
+  }
+  // flying out over the police and down onto the road
+  const u = Math.min(1, TS.tF * T.VL / T.FLY), ns = TS.sLip + TS.tF * T.VL;
+  if (TS.ph === 'fly') {
+    const h = TS.h0 * (1 - u) + 20 * u * (1 - u), slope = (-TS.h0 + 20 * (1 - 2 * u)) / T.FLY;
+    P.dist += ns - P.s; P.s = ns; P.d = 0;
+    frameAt(main, ns, _uf); P.mesh.position.copy(_uf.pos); P.mesh.position.y += h;
+    tunBasis(ns, 0, 0, -Math.atan(slope) * .9, P.mesh.quaternion); model.rotation.set(0, 0, 0); model.position.y = 0;
+  }
+}
+// ---------- cameras ----------
+function tunAt(s, d, h, out) { frameAt(race.world.main, s, _uf2); return out.copy(_uf2.pos).addScaledVector(_uf2.right, d).setY(_uf2.pos.y + h); }
+function tunCamera(C, dt) {
+  const R = race, P = R.player, T = TUN, B = TS.B, s0 = B.s0, car = _uk.copy(P.mesh.position); car.y += .7;
+  const inTR = (x, y, z, out) => B.TR.localToWorld(out.set(x, y, z));
+  const look = _uw; let fov = 55, up = null;
+  frameAt(R.world.main, P.s, _uf);
+  switch (C.shot) {
+    case 'approach': // low behind the car, the roadblock's lights far down the tunnel
+      _uc.copy(car).addScaledVector(_uf.fwd, -9).addScaledVector(_uf.right, -1.2); _uc.y += 1.7; tunAt(s0 + T.BLOCK1, 0, 1.2, look); look.lerp(car, .25); fov = 60; break;
+    case 'block1': // behind the police cars, looking back: the car coming at them flat out
+      if (!C.cam) C.cam = tunAt(s0 + T.BLOCK1 + 16, -4.5, 1.6, new THREE.Vector3()); _uc.copy(C.cam); look.copy(car); fov = 46; break;
+    case 'ramp': // low beside the kicker
+      if (!C.cam) C.cam = tunAt(s0 + T.KICK + 5, 4.2, .55, new THREE.Vector3()); _uc.copy(C.cam); look.copy(car); fov = 60; break;
+    case 'launch': // on the road ahead: the car twisting through the air onto the wall
+      if (!C.cam) C.cam = tunAt(s0 + T.WALL0 + 12, 7, 1.6, new THREE.Vector3()); _uc.copy(C.cam); look.copy(car); fov = 60; break;
+    case 'wall1': // down among the police cars, looking up at the car going over them on the wall
+      if (!C.cam) C.cam = tunAt(s0 + T.BLOCK1 + 9, 7.5, .8, new THREE.Vector3()); _uc.copy(C.cam); look.copy(car); fov = 66; break;
+    case 'wall2': { // chase camera rolled with the car: the tunnel turns on its side
+      _uv.set(0, 1, 0).applyQuaternion(P.mesh.quaternion); _uu.set(0, 0, 1).applyQuaternion(P.mesh.quaternion);
+      _uc.copy(car).addScaledVector(_uu, -8.5).addScaledVector(_uv, 2.3); look.copy(car).addScaledVector(_uu, 12); up = _ul.copy(_uup).lerp(_uv, .8).normalize(); fov = 64; break; }
+    case 'wall3': // alongside from the middle of the road, the car racing along the wall above the lens
+      _uc.copy(tunAt(P.s - 4, 5, 1.3, _uc)); look.copy(car).addScaledVector(_uf.fwd, 6); fov = 58; break;
+    case 'drop': // inside the trailer at the front, looking out of the open back: the car drops off the wall and comes in at the lens
+      inTR(.6, 2.2, 0, _uc); look.copy(car).lerp(inTR(0, 1, -30, _uv), .35); fov = 62; break;
+    case 'enter': // inside, low at the side: the handbrake spin as it comes to rest
+      inTR(1.25, 1.6, T.RZ + 2.5, _uc); look.copy(car); fov = 64; break;
+    case 'hold': { // outside, the truck running for the cave mouth
+      if (!C.cam) { C.cam = 1; C.side = -1; } _uc.copy(B.TG.position).addScaledVector(_uf.right, 11).addScaledVector(_uf.fwd, 10 + (C.t - C.shotT) * 4); _uc.y += 2.6; look.copy(B.TG.position); look.y += 2; fov = 54; break; }
+    case 'block': // behind the second roadblock, looking back at the truck coming out of the cave
+      if (!C.cam) C.cam = tunAt(TS.sBlk + 18, -5, 1.8, new THREE.Vector3()); _uc.copy(C.cam); look.copy(B.TG.position); look.y += 2; fov = 44; break;
+    case 'spin': { // high over the road: the truck slewing round in its own smoke
+      const a = (C.t - C.shotT) * .5; frameAt(R.world.main, TS.sTc, _uf2); _uc.copy(_uf2.pos).addScaledVector(_uf2.right, 18 * Math.cos(a) - 6).addScaledVector(_uf2.fwd, 18 * Math.sin(a) - 16); _uc.y += 17; look.copy(B.TG.position); fov = 50; break; }
+    case 'open': // in the trailer behind the car: the door drops and there are the police
+      inTR(0, 2.3, 1.1, _uc); look.copy(inTR(0, 1.2, -30, _uv)); look.lerp(car, .15); fov = 60; break;
+    case 'fly': // beside the police cars, low: the car sailing over them
+      if (!C.cam) C.cam = tunAt(TS.sBlk + 9, -7.5, .9, new THREE.Vector3()); _uc.copy(C.cam); look.copy(car); fov = 58; break;
+    default: // land: out ahead, the car coming down and away
+      if (!C.cam) C.cam = tunAt(TS.sLip + T.FLY + 16, 4, 1.1, new THREE.Vector3()); _uc.copy(C.cam); look.copy(car); fov = 54;
+  }
+  camera.position.copy(_uc);
+  if (R.shake > 0) { const s = R.shake * .12; camera.position.x += rand(-s, s); camera.position.y += rand(-s, s); R.shake = Math.max(0, R.shake - dt * 2); }
+  if (up) camera.up.copy(up); else camera.up.set(0, 1, 0); camera.lookAt(look);
+  R.fov = C.shot !== C.fovShot ? fov : lerp(R.fov, fov, 1 - Math.exp(-dt * 6)); C.fovShot = C.shot; camera.fov = R.fov; camera.updateProjectionMatrix();
+  R.camOff = null;
+}
+function tunTimeScale(C) {
+  const want = { approach: 1, block1: .85, ramp: .5, launch: .3, wall1: .45, wall2: 1, wall3: .8, drop: .5, enter: .3, hold: .8, block: .7, spin: .45, open: .6, fly: .3, land: .8 }[C.shot] ?? 1;
+  C.tsv = lerp(C.tsv ?? 1, want, want < C.tsv ? .3 : .06); return C.tsv;
 }
 
 
@@ -6375,7 +7067,11 @@ $('mUnload').onclick = () => { const id = CARS[sel.car].id; delete CAR_MODELS[id
   const saved = await ModelStore.all();
   if (CAR_MODELS[CARS[sel.car].id] === undefined) $('modelNote').textContent = MODEL_URLS[CARS[sel.car].id] ? 'Loading the 3D model…' : $('modelNote').textContent;
   const cur = CARS[sel.car].id, order = Object.keys(MODEL_URLS).filter(id => !saved[id]).sort((x, y) => (y === cur) - (x === cur));
+  const loadProp = async id => { const m = PROP_URLS[id]; if (PROP_MODELS[id]) return; // props: the worlds pick them up as they arrive
+    try { const r = await fetch(m.url); if (r.ok) { PROP_MODELS[id] = await parseModel(await r.arrayBuffer(), m.url.replace(/[^/]*$/, '')); for (const fn of propWait[id] || []) { try { fn(PROP_MODELS[id]); } catch (e) { console.warn('prop', id, e); } } propWait[id] = []; } }
+    catch (e) { console.warn('prop', id, e); } };
   for (const id of order) { // one at a time, the selected car first, refreshing the garage as each arrives
+    if (id === order[1]) for (const pid of ['syd', 'riy']) await loadProp(pid); // the first city's metros come straight after your car, before you can reach them
     const m = MODEL_URLS[id];
     try { const r = await fetch(m.url); if (r.ok) { await useModel(id, await r.arrayBuffer(), m.url.split('/').pop(), m.turn || 0, false, m.url.replace(/[^/]*$/, '')); CAR_MODELS[id].credit = m.credit; } }
     catch (e) { console.warn('model', id, e); }
@@ -6387,10 +7083,7 @@ $('mUnload').onclick = () => { const id = CARS[sel.car].id; delete CAR_MODELS[id
     try { const r = await fetch(u + 'scene.json'); if (r.ok) CAR_MODELS[id].lod = await parseModel(await r.arrayBuffer(), u); } catch (e) { console.warn('lod', id, e); }
   }
   if (Object.keys(CAR_MODELS).length && mode === 'garage') garage.setCar(CARS[sel.car], PAINTS[sel.paint]);
-  syncModelUI(); syncMech();  for (const [id, m] of Object.entries(PROP_URLS)) { // then the props, which the worlds pick up as they arrive
-    try { const r = await fetch(m.url); if (r.ok) { PROP_MODELS[id] = await parseModel(await r.arrayBuffer(), m.url.replace(/[^/]*$/, '')); for (const fn of propWait[id] || []) { try { fn(PROP_MODELS[id]); } catch (e) { console.warn('prop', id, e); } } propWait[id] = []; } }
-    catch (e) { console.warn('prop', id, e); }
-  }
+  syncModelUI(); syncMech(); for (const id of Object.keys(PROP_URLS)) await loadProp(id);
 })();
 $('mDoors').onclick = () => { garage.st.doors = garage.st.doors ? 0 : 1; Sound.init(); Sound.hit(.15, 300); syncMech(); };
 $('mAero').onclick = () => { const c = CARS[sel.car]; garage.st.aero = (garage.st.aero + 1) % c.aeroModes.length; syncMech(); };
@@ -6635,6 +7328,8 @@ function cineTimeScale() {
   const c = race && race.cine; if (!c) return 1;
   if (c.type === 'jump') return jumpTimeScale();
   if (c.type === 'metro') return metroTimeScale(c);
+  if (c.type === 'gus') return gusTimeScale(c);
+  if (c.type === 'tun') return tunTimeScale(c);
   if (c.type === 'ocean') return race.world.ocean.timeScale(c);
   if (c.type === 'short') return shortTimeScale(c);
   if (c.type === 'finale') return 1;
@@ -6647,6 +7342,7 @@ function cineTimeScale() {
 function crash(r, label) {
   const R = race, w = R.world;
   if (r.wreck > 0 || r.ghost > 0) return;
+  if (r.isPlayer && R.cine && (R.cine.type === 'event' || R.cine.type === 'biome' || R.cine.type === 'gus' || R.cine.type === 'tun')) return; // nothing wrecks you in the middle of a film
   r.wreck = r.isPlayer ? 1.6 : 2.4; r.v *= r.isPlayer ? .3 : .4; r.spinA = 0;
   launch(r, r.v > 30 ? 7 : 4);
   if (r.isPlayer) startCine('crash', r, label || 'Crashed', 'wrecked');
@@ -6701,6 +7397,8 @@ function stepRace(dt) {
   if (w.GW) grandStep(dt); // Grand Tour: biome entry cutscenes, the rockslide and the flyover
   if (w.metro) metroStep(dt);
   if (w.ocean) w.ocean.step(dt, R);
+  gusStep(dt);
+  tunStep(dt);
   updateFinale(dt);
   if (R.state === 'intro') { R.introT += dt; if (R.introT >= R.introDur) goRace(); }
   if (R.state === 'count') {
@@ -6945,6 +7643,7 @@ function stepRace(dt) {
   R.topSpeed = Math.max(R.topSpeed, P.v / SPEED_SCALE * 3.6);
   for (const r of R.racers) placeRacer(r, dt);
   if (w.ocean) w.ocean.pose(dt, R);
+  tunPose(dt);
   if (P.drifting && R.t - P.driftStart > .6 && !P.driftPopped) { pop('Drift', 'var(--amber)', 'charging nitro'); P.driftPopped = true; }
   if (!P.drifting) P.driftPopped = false;
   // ------ effects ------
@@ -6963,7 +7662,7 @@ function stepRace(dt) {
   w.sparks.update(dt); w.smoke.update(dt);
   const sp = P.v / (P.vmax * 1.1);
   const speedAmt = clamp((sp - .6) / .4, 0, 1) * .6 + P.boostLvl * .4;
-  updateSpeedLines(w.lines, dt, P.v, P.jump || (R.cine && (R.cine.type === 'short' || R.cine.type === 'finale' || R.cine.type === 'train' || R.cine.type === 'biome' || R.cine.type === 'event' || R.cine.type === 'metro' || R.cine.type === 'ocean')) ? 0 : clamp(speedAmt, 0, 1));
+  updateSpeedLines(w.lines, dt, P.v, P.jump || (R.cine && (R.cine.type === 'short' || R.cine.type === 'finale' || R.cine.type === 'train' || R.cine.type === 'biome' || R.cine.type === 'event' || R.cine.type === 'metro' || R.cine.type === 'gus' || R.cine.type === 'tun' || R.cine.type === 'ocean')) ? 0 : clamp(speedAmt, 0, 1));
   if (w.setBlink) { const t = performance.now() / 1000; for (const b of w.setBlink) { const on = ((t * (b.rate || 1) + b.ph) % 1) < .5; if (b.m) b.m.color.copy(on ? b.on : b.off); else if (b.sprite) b.sprite.visible = on; } }
   const tOn = clamp((sp - .55) * 2, 0, 1);
   const nb = P.nitroOn ? P.boostLvl : 0;
@@ -7005,11 +7704,14 @@ function updateRaceCamera(dt) {
   const C = R.cine;
   R.camLift = lerp(R.camLift || 0, P.jump && !(C && C.type === 'jump') ? P.airY : 0, 1 - Math.exp(-dt * 8));
   R.tunnelK = lerp(R.tunnelK || 0, P.route < 0 ? tunnelAmount(R.world, P.s) : 0, 1 - Math.exp(-dt * 3));
-  finalPass.uniforms.uExposure.value = R.world.exposure * (1 - .3 * R.tunnelK);
+  R.avaDim = approach(R.avaDim || 0, R.cine && R.cine.kind === 'ava' ? 1 : 0, dt * 1.5); // the snow reads better stopped down a little
+  finalPass.uniforms.uExposure.value = R.world.exposure * (1 - .3 * R.tunnelK) * (1 - .24 * R.avaDim);
   if (C && C.type === 'finale') { finaleCamera(dt); return; }
   if (R.state === 'intro') { introCamera(dt); return; }
-  finalPass.uniforms.uFilm.value = approach(finalPass.uniforms.uFilm.value, C && (C.type === 'short' || C.type === 'train' || C.type === 'metro' || (C.type === 'ocean' && C.shot !== 'fly')) ? 1 : 0, dt * 2.5);
+  finalPass.uniforms.uFilm.value = approach(finalPass.uniforms.uFilm.value, C && (C.type === 'short' || C.type === 'train' || C.type === 'metro' || C.type === 'gus' || C.type === 'tun' || (C.type === 'ocean' && C.shot !== 'fly')) ? 1 : 0, dt * 2.5);
   if (C && C.type === 'ocean') { R.world.ocean.cam(C, dt); return; }
+  if (C && C.type === 'gus') { gusCamera(C, dt); return; }
+  if (C && C.type === 'tun') { tunCamera(C, dt); return; }
   if (C && C.type === 'jump') { jumpCamera(C, dt); return; }
   if (C && C.type === 'metro') { metroCamera(C, dt); return; }
   if (C && C.type === 'short') { shortCamera(C, dt); return; }
@@ -7203,6 +7905,8 @@ function resize() {
 }
 addEventListener('resize', resize);
 const skipIntro = () => {
+  if (gusTap()) return;
+  if (mode === 'race' && race && race.cine && race.cine.type === 'gus' && race.cine.t > .5) { race.camOff = camera.position.clone().sub(race.player.mesh.position); endCine(); return; }
   if (mode === 'race' && race && race.finale && !race.finale.over && race.finale.t > .8) { endFinale(); return; }
   if (mode === 'race' && race && race.state === 'intro' && race.introT > .4) race.introT = Math.max(race.introT, race.introDur - .5);
   else if (mode === 'race' && race && race.cine && race.cine.type === 'short' && race.cine.t > .6) endShortCine();
