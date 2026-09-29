@@ -1,0 +1,11 @@
+Model Information:
+* title:	Riyadh Metro
+* source:	https://sketchfab.com/3d-models/riyadh-metro-4b2458243ed64df790ecc2c8347ed492
+* author:	Meshal Al-harbi (https://sketchfab.com/meshal.alharbi.me2)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Riyadh Metro" (https://sketchfab.com/3d-models/riyadh-metro-4b2458243ed64df790ecc2c8347ed492) by Meshal Al-harbi (https://sketchfab.com/meshal.alharbi.me2) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

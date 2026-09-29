@@ -1447,6 +1447,7 @@ const PROP_URLS = {
   c17: { url: 'models/c17/scene.json', credit: '"C17 Plane Game-Ready" by HaVe, CC BY 4.0' },
   hst: { url: 'models/hst/scene.json', credit: '"Train - Intercity 125 Executive with Buffers" by timblewee, CC BY 4.0' },
   syd: { url: 'models/syd/scene.json', credit: '"Sydney Metro Driverless Train Alstom Metropolis" by JoTrain The Aussie, Sketchfab Standard' },
+  riy: { url: 'models/riy/scene.json', credit: '"Riyadh Metro" by Meshal Al-harbi, CC BY 4.0' },
 };
 const PROP_MODELS = {}, propWait = {};
 function whenProp(id, fn) { if (PROP_MODELS[id]) fn(PROP_MODELS[id]); else (propWait[id] = propWait[id] || []).push(fn); }
@@ -1772,7 +1773,7 @@ function buildTraffic(kind, color) {
 const GORGE = { RAMP: 22, RAMP_H: 3.4, AIR: 76, APEX: 12.5, OVER: 10, DEPTH: 92, STUB: 34 };
 // the metro bridge (p8): a full-width kicker RAMP long; the carriage floor sits FLOOR above the road, LIP past the lip, and the
 // flight peaks at APEX right in the middle of the carriage so the car threads its doors
-const METRO = { RAMP: 16, RAMP_H: 2.6, LIP: 30, FLOOR: 6.7, APEX: 7.25, CW: 3.1, CL: 21.9, CP: 21.9, N: 4, DX: 6.1, DW: 2.6, DH: 2.0, ROOF: 2.89, DECK: 5.45, TRIG: 900, SCENE: 620, STOP: 140 };
+const METRO = { RAMP: 16, RAMP_H: 2.6, LIP: 30, FLOOR: 6.7, APEX: 7.25, CW: 3.1, CL: 21.9, CP: 21.9, N: 4, DX: 6.1, DW: 2.6, DH: 2.0, ROOF: 2.89, DECK: 5.45, Z2: 4.8, TRIG: 900, SCENE: 760, STOP: 140 };
 // the bay crossing (p9): a kicker RAMP long and RAMP_H high across all lanes throws you up into a cargo plane's open hold,
 // whose floor is HC above the road CATCH past the lip; the flight lasts FLY along the road, and the drop is from DROP_H
 const OCEAN = { RAMP: 30, RAMP_H: 7, CATCH: 52, HC: 11, APEX: 12.6, FLY: 2400, DROP_H: 30, DROP_L: 150, S: 1.35 };
@@ -3684,12 +3685,31 @@ function sydCar(m, kind, L, rev) {
   wrap.scale.set(T.W / 3.05, T.DECK / 4.12, L / S.len); if (rev) { wrap.rotation.y = Math.PI; wrap.position.z = L; }
   return wrap;
 }
+// The Riyadh Metro model: a two-car unit along z (a cab at each end, the gangway at z 0), 2 m wide, wheels at y 0 and the roof at 2.79.
+// 'lead' is one cab car plus the cab-less half of the other; 'mid' is the cab-less half, mirrored into a whole car; 'unit' is all of it.
+let riyParts = null;
+function riySplit(m) {
+  if (riyParts) return riyParts;
+  const list = []; m.updateMatrixWorld(true); m.traverse(o => { if (o.isMesh) list.push(o); });
+  const cut = (z0, z1) => sydMerge(list, (x, y, z) => z >= z0 && z < z1);
+  riyParts = { lead: { z0: -4.1, len: 11.57, meshes: cut(-4.1, 9) }, mid: { z0: 0, len: 11.8, meshes: cut(0, 5.9) }, unit: { z0: -7.38, len: 14.85, meshes: sydMerge(list) } };
+  return riyParts;
+}
+function riyMeshes(S, g) { for (const { geo, mat } of S.meshes) { const o = new THREE.Mesh(geo, mat); o.castShadow = true; o.receiveShadow = true; g.add(o); } return g; }
+// one Riyadh Metro car over a game car of length L, like sydCar
+function riyCar(m, kind, L, rev) {
+  const S = riySplit(m)[kind], T = TRAIN, wrap = new THREE.Group(), body = new THREE.Group(); wrap.add(body);
+  if (kind === 'mid') { const a = riyMeshes(S, new THREE.Group()), b = riyMeshes(S, new THREE.Group()); b.scale.z = -1; b.position.z = S.len; body.add(a, b); }
+  else { riyMeshes(S, body); body.position.z = -S.z0; }
+  wrap.scale.set(T.W / 2, T.DECK / 2.79, L / S.len); if (rev) { wrap.rotation.y = Math.PI; wrap.position.z = L; }
+  return wrap;
+}
 // the rolling stock for one train: wagons from the back (x = 0) forward, then a short buffer car, then the engine
 function buildTrainCars(M, pr, part, kit) {
   const T = TRAIN, st = M.style, W2 = T.W, DK = T.DECK;
   const C = h => new THREE.Color(h), std = (col, o = {}) => new THREE.MeshStandardMaterial({ color: col, roughness: .55, metalness: .3, ...o });
   const box = (w, h, d, m, x, y, z, g) => kit.box(w, h, d, m, x, y, z, g);
-  const sydFit = (grp, stand, kind, L, rev) => whenProp('syd', m => { grp.add(sydCar(m, kind, L, rev)); stand.visible = false; });
+  const sydFit = (grp, stand, kind, L, rev) => whenProp('riy', m => { grp.add(riyCar(m, kind === 'lead' ? 'lead' : 'mid', L, rev)); stand.visible = false; }); // the dusk-city metro is the Riyadh Metro
   const ribTex = (col, text, ribs, door) => canvasTex(512, 128, (g, w, h) => { g.fillStyle = col; g.fillRect(0, 0, w, h);
     for (let x = 0; x < w; x += ribs) { g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(x, 0, 3, h); g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(x + 3, 0, 2, h); }
     for (let i = 0; i < 60; i++) { g.fillStyle = `rgba(${rand(60, 110) | 0},${rand(30, 50) | 0},10,${rand(.05, .2)})`; g.fillRect(rand(0, w), rand(0, h), rand(4, 30), rand(2, 16)); } // weathering
@@ -3786,7 +3806,7 @@ function buildTrainCars(M, pr, part, kit) {
     box(W2, T.LOCO_H - 1.3, L - 4, icBody, 0, 1.3 + (T.LOCO_H - 1.3) / 2, (L - 4) / 2, stand); const nz = box(W2, 2.4, 4, std('#f2c200'), 0, 2.4, L - 2.2, stand); nz.rotation.x = -.3;
     fit(g, false);
     const rg = part(pr.wag0 - L - .6, L); const rs = new THREE.Group(); rg.add(rs); rg.userData.stand = rs; box(W2, T.LOCO_H - 1.3, L - 4, icBody, 0, 1.3 + (T.LOCO_H - 1.3) / 2, L / 2 + 2, rs); fit(rg, true);
-  } else { // metro lead car: a raked windscreen, headlights and a destination sign (a stand-in for the Sydney Metro cab), and a cab at the back too
+  } else { // metro lead car: a raked windscreen, headlights and a destination sign (a stand-in for the Riyadh Metro cab), and a cab at the back too
     const g0 = g, s0 = new THREE.Group(); g0.add(s0);
     { const rg = part(pr.wag0 - L - .6, L), rs = new THREE.Group(); rg.add(rs); box(W2, DK - 1.1, L - .3, silver, 0, 1.1 + (DK - 1.1) / 2 - .05, L / 2, rs); sydFit(rg, rs, 'lead', L, true); }
     { const g = s0;
@@ -5248,46 +5268,56 @@ function buildMetro(W, T) {
   const signMat = new THREE.MeshBasicMaterial({ map: signTex, color: new THREE.Color(1.3, 1.3, 1.3) });
   const destTex = canvasTex(256, 48, (g, w, h) => { g.fillStyle = '#050505'; g.fillRect(0, 0, w, h); g.fillStyle = '#ffb020'; g.font = '800 30px "Chakra Petch", monospace'; g.textBaseline = 'middle'; g.fillText('1  HARBOUR', 14, h / 2 + 1); });
   const destMat = new THREE.MeshBasicMaterial({ map: destTex, color: new THREE.Color(2, 2, 2) });
-  const facadeTex = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#6f7580'; g.fillRect(0, 0, w, h); for (let y = 8; y < h; y += 32) for (let x = 8; x < w; x += 32) { g.fillStyle = Math.random() < .35 ? '#ffe2a8' : '#26303c'; g.fillRect(x, y, 20, 20); } });
-  facadeTex.wrapS = facadeTex.wrapT = THREE.RepeatWrapping; facadeTex.repeat.set(3, 4);
+  const facadeTex = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#39424d'; g.fillRect(0, 0, w, h); for (let y = 4; y < h; y += 32) { g.fillStyle = '#5b6570'; g.fillRect(0, y + 22, w, 6); for (let x = 2; x < w; x += 16) { g.fillStyle = Math.random() < .18 ? '#e9d3a4' : '#1d2631'; g.fillRect(x, y, 13, 20); } } });
+  facadeTex.wrapS = facadeTex.wrapT = THREE.RepeatWrapping; facadeTex.repeat.set(2, 3); facadeTex.anisotropy = 8;
   const facade = new THREE.MeshStandardMaterial({ map: facadeTex, roughness: .7, emissive: new THREE.Color(1, .92, .75), emissiveMap: facadeTex, emissiveIntensity: .15 });
   const pplMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .8 });
 
   // ---------- the viaduct, its piers, and the portals at each end ----------
   const vb = partBin(), len = x1 - x0, xm = (x0 + x1) / 2, D = M.DECK;
-  vb.box(len, 1.15, 6.4, conc, xm, D - .575, 0);
-  for (const sz of [-1, 1]) { vb.box(len, .85, .28, conc, xm, D + .42, sz * 3.06); vb.box(len, .15, .1, steelM, xm, D + .08, sz * .72); vb.box(len, .08, .08, lineM, xm, D - .6, sz * 3.21); }
+  const Z2 = M.Z2, zm = Z2 / 2; // Line 1 (the Sydney Metro you fly through) at z 0, Line 2 (the Riyadh Metro) at Z2 on the far side
+  vb.box(len, 1.15, 6.4 + Z2, conc, xm, D - .575, zm);
+  for (const z of [-3.06, Z2 + 3.06]) { vb.box(len, .85, .28, conc, xm, D + .42, z); vb.box(len, .08, .08, lineM, xm, D - .6, z + Math.sign(z) * .15); }
   // the track: a ballast bed, concrete sleepers every 65 cm, two rails with a head, web and foot, and a covered third rail
-  const bal = new THREE.Mesh(new THREE.BoxGeometry(len, .04, 3.1), new THREE.MeshStandardMaterial({ map: sleeperTex.clone(), color: '#8c877f', roughness: 1 })); bal.material.map.needsUpdate = true; bal.material.map.repeat.set(len / 1.4, 2); bal.position.set(xm, D + .0, 0); bal.receiveShadow = true; MG.add(bal);
-  { const nS = Math.floor(len / .65), sm = new THREE.InstancedMesh(new THREE.BoxGeometry(.26, .05, 2.5), std('#a9a59c', { roughness: .85 }), nS), mm = new THREE.Matrix4();
-    for (let i = 0; i < nS; i++) { mm.makeTranslation(x0 + .3 + i * .65, D + .025, 0); sm.setMatrixAt(i, mm); } sm.receiveShadow = true; MG.add(sm); }
+  const balM = new THREE.MeshStandardMaterial({ map: sleeperTex.clone(), color: '#8c877f', roughness: 1 }); balM.map.needsUpdate = true; balM.map.repeat.set(len / 1.4, 2);
   const railM = std('#9aa0a8', { metalness: .9, roughness: .3 }), railTop = std('#e3e7ec', { metalness: 1, roughness: .15 });
-  for (const sz of [-1, 1]) { const z = sz * .7175; vb.box(len, .02, .15, railM, xm, D + .06, z); vb.box(len, .03, .03, railM, xm, D + .085, z); vb.box(len, .03, .075, railTop, xm, D + .115, z); }
-  vb.box(len, .09, .12, darkM, xm, D + .09, 1.75); vb.box(len, .025, .2, yellow, xm, D + .15, 1.75); // third rail and its cover
+  { const nS = Math.floor(len / .65), sm = new THREE.InstancedMesh(new THREE.BoxGeometry(.26, .05, 2.5), std('#a9a59c', { roughness: .85 }), nS * 2), mm = new THREE.Matrix4();
+    [0, Z2].forEach((tz, j) => {
+      const bal = new THREE.Mesh(new THREE.BoxGeometry(len, .04, 3.1), balM); bal.position.set(xm, D, tz); bal.receiveShadow = true; MG.add(bal);
+      for (let i = 0; i < nS; i++) { mm.makeTranslation(x0 + .3 + i * .65, D + .025, tz); sm.setMatrixAt(j * nS + i, mm); }
+      for (const sz of [-1, 1]) { const z = tz + sz * .7175; vb.box(len, .02, .15, railM, xm, D + .06, z); vb.box(len, .03, .03, railM, xm, D + .085, z); vb.box(len, .03, .075, railTop, xm, D + .115, z); }
+      const tr = j ? tz + 1.75 : -1.75; vb.box(len, .09, .12, darkM, xm, D + .09, tr); vb.box(len, .025, .2, yellow, xm, D + .15, tr); // third rail and its cover, on the outside
+    });
+    sm.receiveShadow = true; MG.add(sm); }
+  // a cable trough and signal posts down the middle, between the two lines
+  vb.box(len, .18, .4, concDark, xm, D + .09, zm);
+  for (let x = x0 + 20; x < x1 - 10; x += 60) { if (x > -H - 3 && x < H + 80) continue; vb.box(.12, 3.2, .12, darkM, x, D + 1.6, zm); vb.box(.3, .7, .25, darkM, x, D + 3.3, zm); }
   const piers = []; for (let x = H + 4; x < endR - 4; x += 30) piers.push(-x); for (let x = H + 4; x < endL - 4; x += 30) piers.push(x);
-  for (const x of piers) { const gy = Math.min(ground(x, 0), 0) - 1, h = D - 1.15 - gy; vb.box(1.7, h, 1.7, concDark, x, gy + h / 2, 0); vb.box(2.2, .7, 6.8, concDark, x, D - 1.5, 0); }
+  for (const x of piers) { const gy = Math.min(ground(x, 0), 0) - 1, h = D - 1.15 - gy; vb.box(2.4, h, 1.7, concDark, x, gy + h / 2, zm); vb.box(2.4, .7, 7.2 + Z2, concDark, x, D - 1.5, zm); }
   // Central station: platforms either side of the track off the left of the road, under a canopy
   const st0 = H + 4, st1 = Math.min(H + 44, endL - 2), stL = st1 - st0, stM = (st0 + st1) / 2;
-  vb.box(stL, 1.15, 13.4, conc, stM, D - .575, 0);
+  vb.box(stL, 1.15, 13.4 + Z2, conc, stM, D - .575, zm);
+  const pz = sz => sz > 0 ? Z2 : 0; // the far platform serves Line 2
   for (const sz of [-1, 1]) {
-    vb.box(stL, M.FLOOR - D - .05, 4.4, conc, stM, (D + M.FLOOR - .05) / 2, sz * 4.05);
-    vb.box(stL, .02, .3, yellow, stM, M.FLOOR - .04, sz * 2.02);
-    for (let x = st0 + 3; x < st1; x += 8) { vb.add(new THREE.CylinderGeometry(.18, .2, 4.4, 10), steelM, x, M.FLOOR + 2.15, sz * 5.4); if ((x - st0) % 16 < 8) { vb.box(2.2, .1, .5, seatM, x + 4, M.FLOOR + .45, sz * 5.7); vb.box(2.2, .45, .08, seatM, x + 4, M.FLOOR + .7, sz * 5.95); vb.box(.1, .42, .5, steelM, x + 3, M.FLOOR + .21, sz * 5.7); vb.box(.1, .42, .5, steelM, x + 5, M.FLOOR + .21, sz * 5.7); } }
-    vb.box(stL, .08, .5, lamp, stM, M.FLOOR + 4.1, sz * 3.4);
+    vb.box(stL, M.FLOOR - D - .05, 4.4, conc, stM, (D + M.FLOOR - .05) / 2, sz * 4.05 + pz(sz));
+    vb.box(stL, .02, .3, yellow, stM, M.FLOOR - .04, sz * 2.02 + pz(sz));
+    for (let x = st0 + 3; x < st1; x += 8) { vb.add(new THREE.CylinderGeometry(.18, .2, 4.4, 10), steelM, x, M.FLOOR + 2.15, sz * 5.4 + pz(sz)); if ((x - st0) % 16 < 8) { vb.box(2.2, .1, .5, seatM, x + 4, M.FLOOR + .45, sz * 5.7 + pz(sz)); vb.box(2.2, .45, .08, seatM, x + 4, M.FLOOR + .7, sz * 5.95 + pz(sz)); vb.box(.1, .42, .5, steelM, x + 3, M.FLOOR + .21, sz * 5.7 + pz(sz)); vb.box(.1, .42, .5, steelM, x + 5, M.FLOOR + .21, sz * 5.7 + pz(sz)); } }
+    vb.box(stL, .08, .5, lamp, stM, M.FLOOR + 4.1, sz * 3.4 + pz(sz));
   }
-  vb.box(stL + 2, .35, 14.4, steelM, stM, M.FLOOR + 4.45, 0); vb.box(stL + 2.4, .6, .3, lineM, stM, M.FLOOR + 4.3, 7.2); vb.box(stL + 2.4, .6, .3, lineM, stM, M.FLOOR + 4.3, -7.2);
+  vb.box(stL, .08, .5, lamp, stM, M.FLOOR + 4.1, zm);
+  vb.box(stL + 2, .35, 14.4 + Z2, steelM, stM, M.FLOOR + 4.45, zm); vb.box(stL + 2.4, .6, .3, lineM, stM, M.FLOOR + 4.3, 7.2 + Z2); vb.box(stL + 2.4, .6, .3, lineM, stM, M.FLOOR + 4.3, -7.2);
   // the entrance hall under the platforms, and a stair up
   { const gy = Math.min(ground(stM, 0), 0); vb.box(stL - 6, 3.8, 10, facade, stM, gy + 1.9, 0); vb.box(stL - 5, .3, 11, steelM, stM, gy + 3.95, 0); }
   // portals: the line runs into a building at each end
   for (const [x, sg] of [[x0, -1], [x1, 1]]) {
     const gy = Math.min(ground(x + sg * 20, 0), 0) - 2, hb = D + 28 - gy + rand(0, 20);
     vb.box(40, hb, 38, facade, x + sg * 20, gy + hb / 2, 0);
-    vb.box(.2, 5.2, 5, darkM, x + sg * .1, D + 2.6, 0);
-    vb.box(.4, .5, 6.2, lineM, x - sg * .1, D + 5.4, 0);
+    for (const tz of [0, Z2]) { vb.box(.2, 5.2, 4.2, darkM, x + sg * .1, D + 2.6, tz); vb.box(.3, .18, 4.4, lamp, x - sg * .1, D + 5.3, tz); for (const e of [-1, 1]) vb.box(.3, 5.2, .18, lamp, x - sg * .1, D + 2.6, tz + e * 2.2); }
+    vb.box(.4, .6, 6.2 + Z2 + 1, lineM, x - sg * .1, D + 5.75, zm);
   }
   vb.flush(MG);
   // lights under the canopy, and the station signs
-  for (const sz of [-1, 1]) for (const x of [st0 + stL * .3, st0 + stL * .72]) { const s = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.05), signMat); s.position.set(x, M.FLOOR + 3.2, sz * 6.1); s.rotation.y = sz > 0 ? Math.PI : 0; MG.add(s); const s2 = s.clone(); s2.rotation.y += Math.PI; s2.position.z -= sz * .02; MG.add(s2); }
+  for (const sz of [-1, 1]) for (const x of [st0 + stL * .3, st0 + stL * .72]) { const s = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.05), signMat); s.position.set(x, M.FLOOR + 3.2, sz * 6.1 + pz(sz)); s.rotation.y = sz > 0 ? Math.PI : 0; MG.add(s); const s2 = s.clone(); s2.rotation.y += Math.PI; s2.position.z -= sz * .02; MG.add(s2); }
   { const hs = new THREE.Mesh(new THREE.PlaneGeometry(7, 1.75), signMat), gy = Math.min(ground(stM, 0), 0); hs.position.set(stM, gy + 4.9, 5.02 + .1); MG.add(hs); const hs2 = hs.clone(); hs2.rotation.y = Math.PI; hs2.position.z = -5.12; MG.add(hs2); }
 
   // ---------- the train ----------
@@ -5363,15 +5393,24 @@ function buildMetro(W, T) {
     glass.visible = false; // the model has its own glass; these panes only show once cracked
   });
   // people waiting on the platforms
-  for (let i = 0; i < 10; i++) { const q = makePerson(pplMat, false), sz = i % 2 ? 1 : -1; q.x0 = q.hx = lerp(st0 + 2, st1 - 2, rand(0, 1)); q.y0 = M.FLOOR; q.z0 = q.hz = sz * rand(3.2, 5.2); q.yaw0 = sz > 0 ? Math.PI + rand(-.5, .5) : rand(-.5, .5); q.car = -1; q.g.position.set(q.x0, q.y0, q.z0); MG.add(q.g); people.push(q); }
+  for (let i = 0; i < 10; i++) { const q = makePerson(pplMat, false), sz = i % 2 ? 1 : -1; q.x0 = q.hx = lerp(st0 + 2, st1 - 2, rand(0, 1)); q.y0 = M.FLOOR; q.z0 = q.hz = sz * rand(3.2, 5.2) + pz(sz); q.yaw0 = sz > 0 ? Math.PI + rand(-.5, .5) : rand(-.5, .5); q.car = -1; q.g.position.set(q.x0, q.y0, q.z0); MG.add(q.g); people.push(q); }
+
+  // ---------- the Riyadh Metro on Line 2: three two-car units running out the other way, across the road and into the right-hand portal ----------
+  const RG = new THREE.Group(); RG.visible = false; MG.add(RG); const RS = 1.45, RU = 14.85 * RS, RN = 3, RH = RU * RN / 2;
+  whenProp('riy', m => { const S = riySplit(m).unit;
+    for (let i = 0; i < RN; i++) { const u = riyMeshes(S, new THREE.Group()); u.scale.setScalar(RS); u.rotation.y = Math.PI / 2; u.position.set((i - (RN - 1) / 2) * (RU + .4), D + .13, Z2); RG.add(u); }
+    const beam = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: new THREE.Color(1.6, 1.6, 1.5), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    beam.scale.setScalar(3.4); beam.position.set(-RH - .6, D + 1.1, Z2); RG.add(beam); });
+  // its place along the line follows yours through the opening film, so it always crosses in front of the camera; after that it runs on
+  const riyAt = x => -(x + 400) * .32;
 
   // ---------- running the scene ----------
   const oS = endR + 45, oGone = -(endL + 45); // where the train starts (inside the right-hand portal) and where it vanishes
   const doorsAt = () => { const out = []; for (let k = 0; k < M.N; k++) for (const u of DU) out.push({ k, u, d: (k - 2) * M.CP - u }); return out; };
   let st = null;
-  const api = { p, MG, TG, cars, endL, endR, oS };
+  const api = { p, MG, TG, RG, cars, endL, endR, oS, riyAt, RH };
   api.reset = () => {
-    st = { camHit: null, phase: 'idle', o: oS, open: 0, passed: false, closed: false, hits: 0, dep: 0, shock: 0, fear: 0, door: null, t: 0, cops: [], chime: 0, x: -1e9 };
+    st = { camHit: null, phase: 'idle', o: oS, open: 0, passed: false, closed: false, hits: 0, dep: 0, shock: 0, fear: 0, door: null, t: 0, cops: [], chime: 0, x: -1e9, rx: 1e4 };
     TG.visible = false; for (const L of leaves) { L.m.position.set(L.ux, M.DH / 2, L.side * (CW / 2 + .03)); L.m.rotation.set(0, 0, 0); }
     for (const pn of panes) pn.m.material = glass; for (const c of cars) { c.rock = c.rockV = 0; c.g.rotation.x = 0; }
     for (const q of people) { q.x0 = q.hx; q.z0 = q.hz; q.look = null; q.away = null; q.dodge = 0; q.shock = 0; q.fear = 0; posePerson(q, 0, 0, 0); }
@@ -5453,6 +5492,8 @@ function buildMetro(W, T) {
     }
     if (st.phase === 'depart') { st.dep += dt; st.open = 0; st.o = -2.5 * st.dep * st.dep; if (st.o < oGone) { st.phase = 'gone'; } }
     TG.visible = st.phase !== 'idle' && st.phase !== 'gone';
+    if (x < -250) st.rx = riyAt(x); else st.rx -= 36 * dt;
+    RG.position.x = st.rx; RG.visible = RG.children.length > 0 && st.rx - RH < x1 + 40 && st.rx + RH > x0 - 40;
     TG.position.x = -st.o;
     for (const L of leaves) L.m.position.x = L.ux + L.dir * st.open * (DW / 2 - .06);
     const blink = st.open > 0 && st.open < 1 || (st.phase === 'stopped' && !st.closed && st.open > 0);
@@ -5488,14 +5529,15 @@ function metroStep(dt) {
   if (!st.film && free && x > -METRO.SCENE && x < -430 && !P.jump) { // the train coming in, from the platform
     st.film = 1; if (C) endCine(); metroClearRoad(); $('cineLabel').innerHTML = '';
     R.cine = { type: 'metro', t: 0, dur: 99, shot: 'arrive', shotT: 0, tsv: 1 };
-    $('movieTitle').innerHTML = '<b>Line 1 · Central</b><small>Apex City Metro · the 8:14 to Harbour</small>';
+    $('movieTitle').innerHTML = '<b>Central Station</b><small>Apex City Metro · Line 1 and Line 2</small>';
     $('hud').classList.add('cine', 'movie'); Sound.whoosh(.25, 1.6);
   }
   const MC = R.cine && R.cine.type === 'metro' ? R.cine : null;
   if (!MC) return;
   if (R.state !== 'race' || P.wreck > 0) { metroEnd(); return; }
   let shot = MC.shot;
-  if (shot === 'arrive' && x > -430) shot = 'under';
+  if (shot === 'arrive' && x > -600) shot = 'pass';
+  if (shot === 'pass' && x > -430) shot = 'under';
   if (shot === 'under' && x > -250) { metroEnd(); return; }
   if (P.jump && P.jump.p.metro) {
     if (x < -30) shot = 'ramp'; else if (x < -9) shot = 'rise'; else if (x < 6) shot = 'inside'; else if (x < 24) shot = 'exit'; else if (!st.hits) shot = 'cops';
@@ -5530,7 +5572,7 @@ function metroEnd() {
   R.camOff = camera.position.clone().sub(R.player.mesh.position); endCine();
 }
 function metroTimeScale(C) {
-  const want = { arrive: 1, under: .8, ramp: .5, rise: .26, inside: .09, exit: .24, cops: .2, shock: .32, away: .7 }[C.shot] ?? 1;
+  const want = { arrive: .6, pass: .5, under: .7, ramp: .5, rise: .26, inside: .09, exit: .24, cops: .2, shock: .32, away: .7 }[C.shot] ?? 1;
   C.tsv = lerp(C.tsv ?? 1, want, want < C.tsv ? .35 : .08);
   return C.tsv;
 }
@@ -5544,11 +5586,13 @@ function metroCamera(C, dt) {
   const u = C.t - C.shotT, dx = dr ? -dr.d : -P.d;
   let fov = 50, look = car;
   switch (C.shot) {
-    case 'arrive': { // on the platform, looking up the line as the train runs in
-      inMG(MAIN_HW + 10 - u * 1.5, M.FLOOR + 1.55, 2.9, _mc); fov = 44;
-      const head = -st.o + 2 * M.CP + M.CL / 2; look = inMG(clamp(head - 8, -170, MAIN_HW - 6), M.FLOOR + 1.6, -.6, _mv); break; }
-    case 'under': // on the road just past the bridge, the car coming at you under the braking train
-      inMG(-7, 1.2, 15 - u * 2, _mc); fov = 54; look = _mv.copy(car).lerp(inMG(-P.d, M.FLOOR, 0, new THREE.Vector3()), .35); break;
+    case 'arrive': { // low between the two lines past the platforms: Line 2 rushes out past the camera as Line 1 runs in head-on
+      inMG(MAIN_HW + 50 - u * 2.5, M.DECK + 1.25, M.Z2 / 2, _mc); fov = 40;
+      const head = -st.o + 2 * M.CP + M.CL / 2; look = inMG(Math.min(head - 30, MAIN_HW - 20), M.DECK + 2.1, M.Z2 * .3, _mv); break; }
+    case 'pass': // up beside the far side of the viaduct as the two trains cross over the road
+      inMG(MAIN_HW + 4 - u * 4, M.DECK + 4.3, M.Z2 + 13, _mc); fov = 46; look = inMG(-26 - u * 3, M.DECK + 1.8, M.Z2 * .4, _mv); break;
+    case 'under': { // high over the road past the bridge, looking back at it: both trains on it and your car coming under
+      inMG(-11 + u * 1.5, M.DECK + 7.5, 36 - u * 3, _mc); fov = 42; look = _mv.copy(inMG(-2, M.DECK + 1, 0, new THREE.Vector3())).lerp(car, .22); break; }
     case 'ramp': // low at the roadside by the lip, the open doors above
       inMG(-P.d + (P.d > 0 ? 7 : -7), 1.3, -62 + u * 8, _mc); fov = 50; look = _mv.copy(car).lerp(inMG(dx, M.FLOOR + 1.2, 0, new THREE.Vector3()), .45); break;
     case 'rise': // level with the carriage, outside, as the doors slide open for you
