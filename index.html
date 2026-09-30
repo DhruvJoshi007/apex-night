@@ -7176,6 +7176,9 @@ const HERO_POSES = {
   // sitting back, looking up at the hologram over his wrist, the right hand reaching out to touch it
   holo: { hips: { e: [-.15, 0, 0] }, spine: { e: [0, 0, 0] }, hipL: { d: [.12, -.08, 1] }, knL: { d: [.05, -1, .25] }, hipR: { d: [-.12, -.08, 1] }, knR: { d: [-.05, -1, .25] },
     shL: { d: [.3, -.85, .45] }, elL: { d: [-.6, .6, .5], t: 1.3 }, shR: { d: [-.2, -.5, .85] }, elR: { d: [.45, .35, .85] }, neck: { e: [0, -.08, 0] }, head: { e: [-.05, -.25, 0] } },
+  // the right hand reaching across to the touchscreen in the middle of the dash
+  reach: { hips: { e: [-.15, 0, 0] }, spine: { e: [.18, -.12, 0] }, hipL: { d: [.12, -.08, 1] }, knL: { d: [.05, -1, .25] }, hipR: { d: [-.12, -.08, 1] }, knR: { d: [-.05, -1, .25] },
+    shL: { d: [.25, -.55, .8] }, elL: { d: [-.15, .25, 1], t: .6 }, shR: { d: [.55, -.1, .83] }, elR: { d: [.6, .05, .8], t: -.3 }, head: { e: [.12, -.2, 0] } },
   crouch: { hips: { e: [.35, 0, 0] }, spine: { e: [.25, 0, 0] }, hipL: { d: [.2, -.35, 1] }, knL: { d: [.05, -1, -.6] }, hipR: { d: [-.2, -.35, 1] }, knR: { d: [-.05, -1, -.6] },
     shL: { d: [.25, -.8, -.5] }, elL: { d: [.1, -1, -.2] }, shR: { d: [-.25, -.8, -.5] }, elR: { d: [-.1, -1, -.2] }, head: { e: [-.35, 0, 0] } },
   leap: { hips: { e: [-.1, 0, 0] }, spine: { e: [.12, 0, 0] }, hipL: { d: [.15, -.2, 1] }, knL: { d: [.05, -.8, -.6] }, hipR: { d: [-.1, -.95, -.25] }, knR: { d: [-.05, -.5, -.9] },
@@ -7278,20 +7281,24 @@ function makeHero(m) {
     ch.position.set(0, 51 - HERO_J.chest[0][1], 5.2); ch.rotation.x = Math.PI / 2 + .55; ch.scale.set(1, 1.15, 1); bones.chest.add(ch); }
   // ---- the bracelet on the left wrist: a black band with a glowing face and a button ----
   const glowM = new THREE.MeshBasicMaterial({ color: new THREE.Color(.2, .9, 2.2) });
-  const band = new THREE.Group(); band.position.set(HERO_J.wrL[0][0] - HERO_J.elL[0][0] - 1.6, HERO_J.wrL[0][1] - HERO_J.elL[0][1] + 1.5, HERO_J.wrL[0][2] - HERO_J.elL[0][2]);
-  { const dir = new THREE.Vector3(14, -14, 3).normalize(); band.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir); }
+  // measured off the mesh: the wrist sits at about (48.5, 19.6, 5.7), the forearm running (7, -6.4, 4.1)
+  const band = new THREE.Group(); band.position.set(48.5 - HERO_J.elL[0][0], 19.6 - HERO_J.elL[0][1], 5.7 - HERO_J.elL[0][2]);
+  { const dir = new THREE.Vector3(7, -6.4, 4.1).normalize(); band.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    // turn the face to the back of the wrist (up and out)
+    const want = new THREE.Vector3(0, 1, -.35).projectOnPlane(dir).normalize(), cur = new THREE.Vector3(0, 0, 1).applyQuaternion(band.quaternion);
+    const ang = Math.atan2(new THREE.Vector3().crossVectors(cur, want).dot(dir), cur.dot(want)); band.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(dir, ang)); }
   bones.elL.add(band);
-  { const ring = new THREE.Mesh(new THREE.CylinderGeometry(2.75, 2.75, 2.2, 28, 1, true), new THREE.MeshStandardMaterial({ color: '#15171b', metalness: .8, roughness: .3, side: THREE.DoubleSide })); band.add(ring);
-    const face = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.9, .5), new THREE.MeshStandardMaterial({ color: '#0b0d10', metalness: .9, roughness: .2 })); face.position.set(0, 0, 2.8); band.add(face);
-    const scr = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 1.4), glowM); scr.position.set(0, 0, 3.07); band.add(scr);
-    const btn = new THREE.Mesh(new THREE.CylinderGeometry(.35, .35, .5, 12), glowM); btn.rotation.x = Math.PI / 2; btn.position.set(1.7, 0, 2.7); band.add(btn);
-    for (const e of [-1, 1]) { const g = new THREE.Mesh(new THREE.TorusGeometry(2.78, .12, 6, 28), glowM); g.rotation.x = Math.PI / 2; g.position.y = e * 1.05; band.add(g); } }
+  { const ring = new THREE.Mesh(new THREE.CylinderGeometry(3.0, 3.0, 2.2, 28, 1, true), new THREE.MeshStandardMaterial({ color: '#15171b', metalness: .8, roughness: .3, side: THREE.DoubleSide })); band.add(ring);
+    const face = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.9, .5), new THREE.MeshStandardMaterial({ color: '#0b0d10', metalness: .9, roughness: .2 })); face.position.set(0, 0, 3.05); band.add(face);
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 1.4), glowM); scr.position.set(0, 0, 3.32); band.add(scr);
+    const btn = new THREE.Mesh(new THREE.CylinderGeometry(.35, .35, .5, 12), glowM); btn.rotation.x = Math.PI / 2; btn.position.set(1.7, 0, 2.95); band.add(btn);
+    for (const e of [-1, 1]) { const g = new THREE.Mesh(new THREE.TorusGeometry(3.03, .12, 6, 28), glowM); g.rotation.x = Math.PI / 2; g.position.y = e * 1.05; band.add(g); } }
   heroPose({ bones }, 'stand');
   root.traverse(o => { if (o.isMesh) o.receiveShadow = false; }); // no shadow acne on skin and cloth
   return { root, body, bones, skel, meshes, band, glowM };
 }
 // the bracelet's face in world space, and the way it faces
-function heroBand(H, out, dirOut) { H.band.updateWorldMatrix(true, false); out.set(0, 0, 3.2).applyMatrix4(H.band.matrixWorld); if (dirOut) dirOut.set(0, 0, 1).transformDirection(H.band.matrixWorld); return out; }
+function heroBand(H, out, dirOut) { H.band.updateWorldMatrix(true, false); out.set(0, 0, 3.45).applyMatrix4(H.band.matrixWorld); if (dirOut) dirOut.set(0, 0, 1).transformDirection(H.band.matrixWorld); return out; }
 
 /* ============================ THE FUTURE CAR ============================ */
 // Sixty percent of the way round, the police lay a spike strip across the road. The tyres go, the car snakes and
@@ -7301,7 +7308,7 @@ function heroBand(H, out, dirOut) { H.band.updateWorldMatrix(true, false); out.s
 // of it, the whole way shot). It pulls up alongside in a handbrake turn, the canopy lifts, he jumps across from the
 // roof of the wreck into the seat, the canopy closes, and the race goes on in the future car. About two minutes.
 // The race is held still while it runs: nothing else moves, and the race clock stops.
-const FF_AT = .6, FF_G = 2600, FF_DRIVE = 44; // where it starts (share of the lap), how far off the garage is, how long the drive takes
+const FF_AT = .6, FF_G = 1500, FF_DRIVE = 44, FF_VC = 13, FF_VE = 2.4, FF_DC = 7; // where it starts (share of the lap), how far behind you the garage is, how long the drive takes, your car's crawl speeds, and its lane once it limps
 let FF = null;
 const _ff = newFrame(), _ff2 = newFrame(), _fzv = new THREE.Vector3(), _fzw = new THREE.Vector3(), _fzc = new THREE.Vector3(), _fzl = new THREE.Vector3(), _fzq = new THREE.Quaternion(), _fzk = new THREE.Vector3();
 function ffAt(s, d, h, out) { frameAt(race.world.main, s, _ff2); return out.copy(_ff2.pos).addScaledVector(_ff2.right, d).setY(_ff2.pos.y + h); }
@@ -7319,6 +7326,9 @@ function ffCar(m) {
   const cb = new THREE.Box3(); for (const o of can) cb.expandByObject(o);
   const pv = new THREE.Group(); pv.position.set(0, cb.min.y + .05, cb.max.z - .1); O.add(pv); O.updateMatrixWorld(true); for (const o of can) pv.attach(o);
   const L = bb.max.z - bb.min.z, Wd = bb.max.x - bb.min.x;
+  // the wheels: each axle is one mesh (both wheels), so each spins on a pivot at its centre
+  const wheels = [], axles = []; src.traverse(o => { if (o.isMesh && /^(Cube044|Speed_car000)_/.test(o.name)) axles.push(o); });
+  for (const o of axles) { const b = new THREE.Box3().setFromObject(o), sp = new THREE.Group(); b.getCenter(sp.position); O.add(sp); O.updateMatrixWorld(true); sp.attach(o); wheels.push({ spin: sp, pivot: sp, front: false, r: Math.max(.3, (b.max.y - b.min.y) / 2) }); }
   // lights: white at the nose, red at the tail, cyan underneath
   const glow = (c, sx, sy) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: c, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 })); s.scale.set(sx, sy, 1); O.add(s); return s; };
   const heads = [-1, 1].map(e => { const s = glow(new THREE.Color(3, 3, 3.3), 1.1, .5); s.position.set(e * Wd * .33, .75, L / 2 + .05); return s; });
@@ -7327,7 +7337,7 @@ function ffCar(m) {
   under.rotation.x = -Math.PI / 2; under.position.y = .04; O.add(under);
   const beam = new THREE.Mesh(new THREE.PlaneGeometry(6, 20), new THREE.MeshBasicMaterial({ map: beamTex, color: new THREE.Color(.5, .52, .6), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
   beam.rotation.x = -Math.PI / 2; beam.position.set(0, .06, L / 2 + 10); O.add(beam);
-  return { O, pv, L, Wd, H: bb.max.y - bb.min.y, seat: new THREE.Vector3(0, .38, (cb.min.z + cb.max.z) / 2 - .2), lights(v) { for (const s of heads) s.material.opacity = v; for (const s of tails) s.material.opacity = v * .9; under.material.opacity = v * .8; beam.material.opacity = v; } };
+  return { O, pv, L, Wd, wheels, roll(dist) { for (const w of wheels) w.spin.rotation.x += dist / w.r; }, H: bb.max.y - bb.min.y, seat: new THREE.Vector3(0, .38, (cb.min.z + cb.max.z) / 2 - .2), lights(v) { for (const s of heads) s.material.opacity = v; for (const s of tails) s.material.opacity = v * .9; under.material.opacity = v * .8; beam.material.opacity = v; } };
 }
 // a hologram of the car: the same shape in see-through cyan light, scan lines running up it
 const HOLO_MAT = new THREE.ShaderMaterial({ uniforms: { t: { value: 0 }, a: { value: 1 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
@@ -7416,60 +7426,123 @@ function ffInit() {
   const R = race; FF = { R, on: false, done: false };
 }
 function ffReady() { return PROP_MODELS.fut && PROP_MODELS.chr; }
+// the film's timeline (seconds of film time)
+const FFT = { hit: 2.6, crawl: 8, btn: 9.2, roof: 10.4, face: 14.5, band: 17.5, press: 19.5, holo: 22, touch: 29.5, garage: 32.5, drive: 41, arrive: 41 + FF_DRIVE,
+  open: 85.4, stand: 88, leap: 91, seat: 93.2, go: 96.5, thru: 100.5, end: 107 };
+// your car's speed through the film: flat out to the strip, fought down to a crawl, then limping slower and slower on its rims;
+// once you have jumped out it rolls on for a few seconds and stops
+function ffOldV(t) {
+  const F = FF, A = FFT;
+  if (t < A.hit) return F.v0;
+  if (t < A.crawl) { const u = (t - A.hit) / (A.crawl - A.hit); return FF_VC + (F.v0 - FF_VC) * (1 - u) * (1 - u); }
+  const lim = x => FF_VE + (FF_VC - FF_VE) * Math.exp(-(x - A.crawl) / 13);
+  if (t < A.seat + .5) return lim(t);
+  return lim(A.seat + .5) * Math.max(0, 1 - (t - A.seat - .5) / 3.5);
+}
+function ffOldS(t) { const F = FF, k = clamp(t * 60, 0, F.oldS.length - 1.001), i = Math.floor(k); return lerp(F.oldS[i], F.oldS[i + 1], k - i); }
+function ffOldD(t) {
+  const F = FF, A = FFT, H = MAIN_HW;
+  if (t < A.hit) return F.d0;
+  if (t < A.crawl) { const u = (t - A.hit) / (A.crawl - A.hit); return lerp(F.d0, FF_DC, smooth(0, 1, u)) + Math.sin(u * 9) * 1.3 * (1 - u); }
+  return FF_DC + Math.sin(t * .9) * .25 * (1 - smooth(A.arrive - 6, A.arrive, t)) + (H - 2.6 - FF_DC) * smooth(A.seat + .5, A.seat + 4.5, t);
+}
+function ffOldYaw(t) {
+  const A = FFT;
+  if (t < A.hit) return 0;
+  if (t < A.crawl) { const u = (t - A.hit) / (A.crawl - A.hit); return Math.sin(u * 13) * .45 * Math.sin(Math.PI * u); }
+  return .05 * Math.sin(t * 1.7) * (1 - smooth(A.arrive - 6, A.arrive, t)) - .45 * smooth(A.seat + .5, A.seat + 4.5, t);
+}
 // start the film
 function ffStart() {
-  const R = race, P = R.player, W = R.world, L = W.main.L, H = MAIN_HW;
+  const R = race, P = R.player, W = R.world, L = W.main.L, H = MAIN_HW, A = FFT;
   if (R.cine) endCine();
   const F = FF; F.on = true; F.t = 0; F.shot = ''; F.shotT = 0; F.ts = 1; F.flags = {};
-  F.s0 = P.s; F.d0 = P.d; F.v0 = Math.max(P.v, 60); F.sStrip = P.s + F.v0 * 2.6; F.stripT = 2.6;
+  F.s0 = P.s; F.d0 = P.d; F.v0 = Math.max(P.v, 60); F.sStrip = P.s + F.v0 * A.hit;
+  // where your car will be at every moment of the film (it is all scripted, so the future car can be sent to meet it)
+  F.oldS = new Float32Array(Math.ceil((A.end + 3) * 60) + 2); F.oldS[0] = P.s; for (let i = 1; i < F.oldS.length; i++) F.oldS[i] = F.oldS[i - 1] + ffOldV((i - .5) / 60) / 60;
   F.strip = ffStrip(W, F.sStrip);
-  // the police car that laid it, on the verge beside it
-  F.cop = (R.cops || [])[0]; if (F.cop) { F.cop.wreck = 0; F.cop.v = 0; F.cop.ride = null; }
+  // the police car that laid it, on the verge beside it; the other two chase you down
+  F.cop = (R.cops || [])[0]; F.chase = (R.cops || []).slice(1, 3);
+  for (const c of R.cops || []) { c.wreck = 0; c.v = 0; c.ride = null; }
   // the car and the driver
-  F.car = ffCar(PROP_MODELS.fut); F.car.O.visible = false; W.root.add(F.car.O);
+  F.car = ffCar(PROP_MODELS.fut); F.car.O.visible = false; W.root.add(F.car.O); F.car.last = new THREE.Vector3();
   F.hero = makeHero(PROP_MODELS.chr); F.hero.root.scale.setScalar(.9); P.mesh.add(F.hero.root); F.hero.root.position.set(-.36, .28, .3); heroPose(F.hero, 'sit');
   F.holo = ffHolo(F.car); F.holo.g.visible = false; W.root.add(F.holo.g);
+  // the touchscreen in the middle of the dash, with the roof button on it
+  const scr = (on) => canvasTex(256, 160, (x, w, h) => { x.fillStyle = '#05080c'; x.fillRect(0, 0, w, h); x.strokeStyle = 'rgba(90,220,255,.6)'; x.lineWidth = 3; x.strokeRect(4, 4, w - 8, h - 8);
+    x.fillStyle = 'rgba(150,235,255,.85)'; x.font = '700 26px "Chakra Petch", sans-serif'; x.textAlign = 'center'; x.fillText('ROOF', w / 2, 44);
+    x.fillStyle = on ? '#40e8ff' : 'rgba(40,120,150,.55)'; x.beginPath(); x.roundRect ? x.roundRect(48, 64, w - 96, 64, 14) : x.rect(48, 64, w - 96, 64); x.fill();
+    x.fillStyle = on ? '#021018' : '#dff8ff'; x.font = '800 38px "Chakra Petch", sans-serif'; x.fillText('OPEN', w / 2, 110); });
+  F.scrTex = [scr(false), scr(true)];
+  F.dash = new THREE.Mesh(new THREE.PlaneGeometry(.24, .15), new THREE.MeshBasicMaterial({ map: F.scrTex[0], color: new THREE.Color(1.5, 1.5, 1.5), toneMapped: false }));
+  P.mesh.add(F.dash); F.dash.position.set(.04, .9, .72); P.mesh.updateMatrixWorld(true); F.dash.lookAt(P.mesh.localToWorld(new THREE.Vector3(-.3, 1.05, 0)));
   R.cine = { type: 'ff', t: 0, dur: 1e9, shot: 'strip', shotT: 0 };
+  { const h = $('skipHint'); if (h) { F.hint = h.textContent; h.textContent = 'Press Enter to skip'; } }
   $('cineLabel').innerHTML = ''; $('movieTitle').innerHTML = '<b>Stinger</b><small>They have spiked the road</small>';
   const hud = $('hud'); hud.classList.add('cine', 'movie'); Sound.siren(.1); Sound.whoosh(.5, 1.4);
-  // everything else out of the way, and the road clear from here to the garage
-  for (const r of R.racers) if (r !== P && Math.abs(relS(P, r)) < 400) r.mesh.visible = false;
-  for (const c of R.cops || []) if (c !== F.cop) c.mesh.visible = false;
-  const lo = P.s - 200, hi = P.s + FF_G + 900;
+  // everything else out of the way: the road clear from the garage behind you to well past where the film ends
+  const lo = P.s - FF_G - 700, hi = P.s + 1600;
+  for (const r of R.racers) if (r !== P) { const ds = ((r.s - lo) % L + L) % L; if (ds < hi - lo) r.mesh.visible = false; }
   for (const t of W.traffic) { const ds = ((t.s - lo) % L + L) % L; if (ds < hi - lo) { t.s = (hi + 200 + rand(0, 800)) % L; t.cv = t.v; } }
   P.nitroOn = false; P.drifting = false; P.jump = null; P.airY = 0;
 }
-// where the car comes from: the garage on the far side of the road, a way up the road ahead of where you stopped
+// the roof: the car is split in two with clipping planes (the cabin top above the driver's head, and the rest), and the top slides back onto the engine cover
+function ffRoofSetup() {
+  const F = FF, pm = race.player.mesh, model = pm.userData.model, hero = F.hero.root;
+  renderer.localClippingEnabled = true; pm.updateMatrixWorld(true);
+  const inv = pm.matrixWorld.clone().invert(), bb = new THREE.Box3(), tb = new THREE.Box3();
+  model.traverse(o => { if (!o.isMesh || !o.visible || !o.geometry) return; if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); tb.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld).applyMatrix4(inv); bb.union(tb); });
+  const y = Math.max(.9, bb.max.y - .2), z0 = -.95, z1 = 1.1;
+  // the body keeps everything but the cabin top; its own materials, so no other car is cut
+  const base = [new THREE.Plane(), new THREE.Plane(), new THREE.Plane()];
+  model.traverse(o => { if (!o.isMesh) return; o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone();
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) { m.clippingPlanes = base; m.clipIntersection = true; } });
+  // the roof panel: a copy of the car that keeps only the cabin top
+  const RG = new THREE.Group(); pm.add(RG); const top = model.clone(true); RG.add(top); const roofP = [new THREE.Plane(), new THREE.Plane(), new THREE.Plane()];
+  top.traverse(o => { if (o.isSprite || o.isPoints || o.isLight) o.visible = false; if (!o.isMesh) return; o.castShadow = true;
+    o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone();
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) { m.clippingPlanes = roofP; m.clipIntersection = false; } });
+  F.roof = { RG, top, base, roofP, y, z0, z1 };
+}
+const _fzp = new THREE.Vector3(), _fzn = new THREE.Vector3();
+function ffRoofPlanes() {
+  const F = FF, r = F.roof, pm = race.player.mesh; if (!r) return;
+  const set = (pl, M, nx, ny, nz, px, py, pz) => { _fzn.set(nx, ny, nz).transformDirection(M); pl.setFromNormalAndCoplanarPoint(_fzn, _fzp.set(px, py, pz).applyMatrix4(M)); };
+  pm.updateMatrixWorld(true); const M = pm.matrixWorld, Q = r.RG.matrixWorld;
+  // body: cut away only where it is above the line and inside the cabin (negative side of all three)
+  set(r.base[0], M, 0, -1, 0, 0, r.y, 0); set(r.base[1], M, 0, 0, -1, 0, 0, r.z0); set(r.base[2], M, 0, 0, 1, 0, 0, r.z1);
+  // roof: keep only that piece, carried with the panel as it moves
+  set(r.roofP[0], Q, 0, 1, 0, 0, r.y, 0); set(r.roofP[1], Q, 0, 0, 1, 0, 0, r.z0); set(r.roofP[2], Q, 0, 0, -1, 0, 0, r.z1);
+}
+// where the car comes from: the garage on the far side of the road, back down the road behind you. It comes out,
+// runs up the road after you, past the police, and slows to your pace alongside
 function ffPlanDrive() {
-  const F = FF, R = race, W = R.world, H = MAIN_HW;
-  F.sG = F.sStop + FF_G; F.gar = ffGarage(W, F.sG, -1);
+  const F = FF, R = race, W = R.world, H = MAIN_HW, A = FFT;
+  F.sArr = ffOldS(A.arrive); F.dAlong = FF_DC - 4.3;
+  F.sG = ffOldS(A.garage) - FF_G; F.gar = ffGarage(W, F.sG, -1);
   const pts = [], gl = (x, z) => F.gar.local(x, .02 - F.gar.drop * clamp((z - F.gar.Dp / 2) / (F.gar.D - H - F.gar.Dp / 2 + 1), 0, 1), z, new THREE.Vector3());
   // out of the garage and down the drive
-  for (let z = -2; z <= F.gar.Dp / 2 + F.gar.D - H - F.gar.Dp / 2 - 2; z += 1.5) pts.push(gl(0, z));
-  // a sweeping turn onto the road, heading back the way you came, in the far lanes
-  const last = pts[pts.length - 1];
-  const turnEnd = ffAt(F.sG - 26, -5.3, .02, new THREE.Vector3());
-  for (let i = 1; i <= 16; i++) { const u = i / 16, a = last.clone().lerp(turnEnd, u), mid = ffAt(F.sG - 4, -H + 2, .02, new THREE.Vector3()); pts.push(a.lerp(mid, Math.sin(Math.PI * u) * .35)); }
-  for (let s = F.sG - 30; s > F.sStop + 34; s -= 3) pts.push(ffAt(s, -5.3 + 4 * smooth(F.sStop + 150, F.sStop + 60, s), .02, new THREE.Vector3()));
-  // the handbrake turn: in alongside you, swinging round to face up the road
-  F.dAlong = F.dStop - 4.2;
-  for (let i = 0; i <= 14; i++) { const u = i / 14; pts.push(ffAt(F.sStop + 34 - 30 * u, lerp(-1.3, F.dAlong, smooth(0, 1, u)), .02, new THREE.Vector3())); }
+  for (let z = -2; z <= F.gar.D - H - 2; z += 1.5) pts.push(gl(0, z));
+  // a sweeping turn onto the road, heading your way, in the far lane
+  const last = pts[pts.length - 1], turnEnd = ffAt(F.sG + 26, -6, .02, new THREE.Vector3()), mid = ffAt(F.sG + 4, -H + 2, .02, new THREE.Vector3());
+  for (let i = 1; i <= 16; i++) { const u = i / 16; pts.push(last.clone().lerp(turnEnd, u).lerp(mid, Math.sin(Math.PI * u) * .35)); }
+  // up the road, then in alongside you over the last stretch
+  for (let s = F.sG + 30; s < F.sArr - 45; s += 3) pts.push(ffAt(s, -6, .02, new THREE.Vector3()));
+  for (let i = 0; i <= 15; i++) { const u = i / 15; pts.push(ffAt(F.sArr - 45 + 45 * u, lerp(-6, F.dAlong, smooth(0, 1, u)), .02, new THREE.Vector3())); }
   F.path = pts; F.cum = [0]; for (let i = 1; i < pts.length; i++) F.cum.push(F.cum[i - 1] + pts[i].distanceTo(pts[i - 1]));
-  F.len = F.cum[F.cum.length - 1];
+  F.len = F.cum[F.cum.length - 1]; F.vEnd = ffOldV(A.arrive);
 }
 function ffPathAt(l, out, dir) {
   const F = FF, c = F.cum; l = clamp(l, 0, F.len - .001); let i = 1; while (c[i] < l) i++;
   const u = (l - c[i - 1]) / (c[i] - c[i - 1]); out.copy(F.path[i - 1]).lerp(F.path[i], u); if (dir) dir.subVectors(F.path[i], F.path[i - 1]).normalize(); return out;
 }
-// distance along the drive at time t (0..FF_DRIVE): pull away gently, run fast, brake hard for the last stretch
+// distance along the drive at time t (0..FF_DRIVE): pull away gently, run fast, brake down to your crawling pace for the last stretch
 function ffDriveL(t) {
-  const F = FF, T = FF_DRIVE, ta = 7, tb = 5, vmax = (F.len) / (T - ta / 2 - tb / 2);
+  const F = FF, T = FF_DRIVE, ta = 7, tb = 6, ve = F.vEnd, vmax = (F.len - ve * tb / 2) / (T - ta / 2 - tb / 2);
   if (t <= 0) return 0; if (t < ta) return vmax * t * t / (2 * ta);
   if (t < T - tb) return vmax * ta / 2 + vmax * (t - ta);
-  const r = Math.min(t, T) - (T - tb); return vmax * ta / 2 + vmax * (T - tb - ta) + vmax * (r - r * r / (2 * tb));
+  const r = Math.min(t, T) - (T - tb); return vmax * ta / 2 + vmax * (T - tb - ta) + vmax * r - (vmax - ve) * r * r / (2 * tb);
 }
-// the film's timeline (seconds of film time)
-const FFT = { hit: 2.6, stop: 8.4, still: 11, face: 14.5, band: 18.5, press: 20.5, holo: 23, touch: 31, garage: 34, drive: 43, arrive: 43 + FF_DRIVE, open: 89.5, roof: 94, leap: 98, seat: 100.2, go: 106, end: 112 };
 function ffStep(dt) {
   const R = race, P = R.player, W = R.world, F = FF, H = MAIN_HW; F.t += dt; const t = F.t, A = FFT;
   const shot = n => { if (F.shot !== n) { F.shot = n; F.shotT = t; F.cam = null; R.cine.shot = n; } };
@@ -7477,53 +7550,79 @@ function ffStep(dt) {
   const title = (a, b) => { $('movieTitle').innerHTML = `<b>${a}</b><small>${b}</small>`; const hud = $('hud'); hud.classList.remove('movie'); void hud.offsetWidth; hud.classList.add('movie'); };
   const once = (k, fn) => { if (!F.flags[k]) { F.flags[k] = 1; fn(); } };
   const pm = P.mesh, model = pm.userData.model;
-  // ---- the old car: run to the strip, lose it, scrape to a stop on the verge ----
-  if (t < A.stop) {
-    let s, d, yaw = 0, v;
-    if (t < A.hit) { v = F.v0; s = F.s0 + v * t; d = F.d0; }
-    else { const u = (t - A.hit) / (A.stop - A.hit), T = A.stop - A.hit; v = F.v0 * (1 - u); s = F.sStrip + F.v0 * T * (u - u * u / 2); d = lerp(F.d0, H - 2.6, smooth(0, 1, u));
-      yaw = Math.sin(u * 13) * .5 * Math.sin(Math.PI * Math.min(1, u * 1.4)) + .55 * smooth(.6, 1, u); }
-    P.s = s; P.d = d; P.v = v; F.yaw = yaw; F.sStop = s; F.dStop = d;
-    if (t > A.hit) { // sparks off the rims, smoke off the shredded tyres
-      const p = pm.position; for (let k = 0; k < 3; k++) W.sparks.spawn(p.x + rand(-1, 1), p.y + .15, p.z + rand(-1, 1), rand(-6, 6), rand(1, 5), rand(-6, 6), 4, 2.2, .7, .3, rand(.25, .5), -.2, 1.2, 12);
-      if (Math.random() < .6) W.smoke.spawn(p.x, p.y + .3, p.z, rand(-1, 1), rand(.5, 2), rand(-1, 1), .8, .8, .82, 1.5, 1.4, 4, .6);
-      if (Math.random() < .25) Sound.blip(rand(900, 1500), .08, 'sawtooth', .03); }
-  } else if (!F.stopped) { F.stopped = 1; P.v = 0; F.yaw = .55; ffPlanDrive(); }
+  // ---- your car: to the strip, the blow-out, then limping on down the road ----
+  const s = ffOldS(t), v = ffOldV(t);
+  P.s = s; P.d = ffOldD(t); P.v = v; F.yaw = ffOldYaw(t);
+  if (t > A.hit && v > .3) { // sparks off the rims, smoke off the shredded tyres; fewer as it slows
+    const p = pm.position, k = clamp(v / 20, .15, 1);
+    for (let i = 0; i < 3; i++) if (Math.random() < k) W.sparks.spawn(p.x + rand(-1, 1), p.y + .15, p.z + rand(-1, 1), rand(-6, 6), rand(1, 5), rand(-6, 6), 4, 2.2, .7, .3, rand(.25, .5), -.2, 1.2, 12);
+    if (Math.random() < .5 * k + .1) W.smoke.spawn(p.x, p.y + .3, p.z, rand(-1, 1), rand(.5, 2), rand(-1, 1), .8, .8, .82, 1.5, 1.4, 4, .6);
+    if (Math.random() < .25 * k) Sound.blip(rand(900, 1500), .08, 'sawtooth', .03); }
+  for (const w of pm.userData.wheels || []) w.spin.rotation.x += v * dt / w.r;
+  if (t > A.crawl && !F.gar) ffPlanDrive();
   frameAt(W.main, P.s, _ff); pm.position.copy(_ff.pos).addScaledVector(_ff.right, P.d); tunBasis(P.s, F.yaw || 0, 0, 0, pm.quaternion); model.rotation.set(0, 0, 0); model.position.y = 0;
-  if (t > A.hit) { const tilt = F.stopped ? .03 : .06 * Math.sin(t * 20); model.rotation.z = tilt; model.position.y = -.06; }
+  if (t > A.hit) { const tilt = t < A.crawl ? .06 * Math.sin(t * 20) : .03 + .012 * Math.sin(t * 9); model.rotation.z = tilt; model.position.y = -.06; }
   // the strip runs out, and the police car waits beside it
   F.strip.run.scale.z = Math.max(.001, smooth(.2, 1.5, t)) * F.strip.L;
-  if (F.cop) { const c = F.cop; ffAt(F.sStrip + 7, H + 4, 0, c.mesh.position); frameAt(W.main, F.sStrip + 7, _ff2); c.mesh.rotation.set(0, Math.atan2(_ff2.fwd.x, _ff2.fwd.z) + 2.2, 0); c.mesh.visible = t < A.garage; }
+  if (F.cop && t < A.go) { const c = F.cop; ffAt(F.sStrip + 7, H + 4, 0, c.mesh.position); frameAt(W.main, F.sStrip + 7, _ff2); c.mesh.rotation.set(0, Math.atan2(_ff2.fwd.x, _ff2.fwd.z) + 2.2, 0); c.mesh.visible = t < A.garage; }
+  // the chase: two police cars closing on you from behind, lights going
+  F.chase.forEach((c, i) => {
+    if (F.copS === undefined) F.copS = [], F.copV = [];
+    const gap = lerp(180, 20, smooth(A.crawl + 3, A.arrive - 6, t)) + i * 12;
+    let cs;
+    if (t < A.seat) { cs = s - gap; F.copS[i] = cs; F.copV[i] = v; }
+    else { F.copV[i] = Math.min(34, F.copV[i] + 9 * dt); F.copS[i] += F.copV[i] * dt; if (F.sBlock) F.copS[i] = Math.min(F.copS[i], F.sBlock - 14 - i * 9); cs = F.copS[i]; }
+    const cd = i ? 1.5 : FF_DC; ffAt(cs, cd, 0, c.mesh.position); frameAt(W.main, cs, _ff2); c.mesh.rotation.set(0, Math.atan2(_ff2.fwd.x, _ff2.fwd.z), 0);
+    c.mesh.visible = t > A.crawl + 3; });
   // ---- the story beats ----
   if (t < A.hit) shot(t < 1.3 ? 'strip' : 'coming');
   else if (t < A.hit + .8) { shot('burst'); once('burst', () => { Sound.hit(1.6, 500); Sound.hit(1.2, 200); R.shake = 1.4; R.flash = .5; tag('Tyres shredded');
       const p = pm.position; for (let k = 0; k < 60; k++) W.sparks.spawn(p.x, p.y + .3, p.z, rand(-9, 9), rand(2, 9), rand(-9, 9), 4, 2.3, .8, .35, rand(.3, .8), -.2, 1.2, 14);
       for (const w of pm.userData.wheels || []) w.pivot.scale.y = .78; }); }
-  else if (t < 5.6) shot('skid'); else if (t < A.stop) shot('drone');
-  else if (t < A.still) { shot('still'); once('still', () => { Sound.siren(0); title('Stranded', 'Four flat tyres · the police are coming'); }); }
-  else if (t < A.face) shot('face');
-  else if (t < A.holo) { shot(t < A.band ? 'face' : 'band'); }
+  else if (t < 5.6) shot('skid'); else if (t < A.crawl) shot('drone');
+  else if (t < A.btn) { shot('crawl'); once('crawl', () => { Sound.siren(.4); title('Stinger', 'Four flat tyres · the police are closing in'); }); }
+  else if (t < A.roof) shot('btn');
+  else if (t < A.face) shot('roofup');
+  else if (t < A.band) shot('face');
+  else if (t < A.holo) shot('band');
   else if (t < A.touch) shot(t < A.holo + 4 ? 'holo' : 'holo2');
   else if (t < A.garage) shot('touch');
   else if (t < A.drive) shot(t < A.garage + 3 ? 'garage' : t < A.garage + 6 ? 'lights' : 'door');
-  else if (t < A.arrive) { const k = Math.floor((t - A.drive) / 5.5), list = ['out', 'drone2', 'wheel', 'cockpit', 'front', 'wait', 'pass', 'arrive']; shot(list[Math.min(k, list.length - 1)]); }
-  else if (t < A.open) shot('halt');
-  else if (t < A.roof) shot('open');
-  else if (t < A.leap) shot('roof');
+  else if (t < A.arrive - 5.5) { const list = ['out', 'drone2', 'wheel', 'cops', 'cockpit', 'front', 'pass'], k = Math.floor((t - A.drive) / ((A.arrive - 5.5 - A.drive) / list.length)); shot(list[Math.min(k, list.length - 1)]); }
+  else if (t < A.arrive - 3.5) shot('wait');
+  else if (t < A.open) shot('arrive');
+  else if (t < A.stand) shot('open');
+  else if (t < A.leap) shot('stand');
   else if (t < A.seat) shot('leap');
   else if (t < A.go) shot('seat');
-  else shot('go');
-  // the driver
+  else if (t < A.thru - .5) shot('block');
+  else if (t < A.thru + 1.4) shot('thru');
+  else shot('away');
+  // ---- the roof: he taps OPEN on the dash, the top lifts and slides back onto the engine cover ----
   const Hh = F.hero, hs = heroPose;
-  if (t < A.face + 1.2) hs(Hh, 'sit');
+  if (t > A.btn + .9) { once('tap', () => { F.dash.material.map = F.scrTex[1]; Sound.blip(1560, .1, 'sine', .08); tag('Roof · open'); }); }
+  if (t > A.roof - .3 && !F.roof) ffRoofSetup();
+  if (F.roof) {
+    const u = clamp((t - A.roof) / 3.4, 0, 1), a = smooth(0, .25, u), b = smooth(.2, .75, u), c = smooth(.7, 1, u);
+    const r = F.roof; r.top.position.copy(model.position); r.top.rotation.copy(model.rotation); r.top.scale.copy(model.scale);
+    r.RG.position.set(0, .12 * a - .2 * c, -1.85 * b); r.RG.rotation.set(-.06 * b + .04 * c, 0, 0);
+    if (t > A.roof) once('roofGo', () => { Sound.whoosh(.3, 1.2); Sound.blip(220, .9, 'sine', .04); });
+    if (u >= 1) once('roofDn', () => Sound.hit(.35, 300));
+    ffRoofPlanes();
+  }
+  F.dash.visible = t < A.stand;
+  // ---- the driver ----
+  if (t < A.btn) hs(Hh, 'sit');
+  else if (t < A.roof + .6) hs(Hh, 'sit', 'reach', smooth(A.btn, A.btn + .8, t) * (1 - smooth(A.btn + 1.3, A.roof + .6, t)));
+  else if (t < A.face + 1.2) hs(Hh, 'sit');
   else if (t < A.band) hs(Hh, 'sit', 'wrist', smooth(A.face + 1.2, A.face + 2.6, t));
   else if (t < A.press + .8) hs(Hh, 'wrist', 'press', smooth(A.band + .8, A.press, t));
   else if (t < A.touch) hs(Hh, 'press', 'holo', smooth(A.press + .8, A.holo + .5, t));
   else if (t < A.touch + 1.2) hs(Hh, 'holo', 'holo', 0);
-  else if (t < A.open) hs(Hh, 'holo', 'wrist', smooth(A.touch + 1.2, A.touch + 2.4, t));
+  else if (t < A.stand) hs(Hh, 'holo', 'sit', smooth(A.touch + 1.2, A.touch + 2.4, t));
   // the bracelet lights up when pressed, pulses while the car is on its way
   { const on = t > A.press ? 1.6 + Math.sin(t * 6) * .4 : .8; Hh.glowM.color.setRGB(.2 * on, .9 * on, 2.2 * on); }
-  once('press', () => {}); if (t > A.press && !F.flags.pr) { F.flags.pr = 1; Sound.blip(1760, .12, 'sine', .08); Sound.blip(2350, .2, 'sine', .06); }
+  if (t > A.press) once('pr', () => { Sound.blip(1760, .12, 'sine', .08); Sound.blip(2350, .2, 'sine', .06); });
   // the hologram over the wrist
   const hv = t > A.press + .6 && t < A.touch + 1.4;
   F.holo.g.visible = hv;
@@ -7534,57 +7633,64 @@ function ffStep(dt) {
     once('holoOn', () => { Sound.whoosh(.4, 1.6); Sound.blip(880, .6, 'sine', .05); }); }
   if (t > A.touch) once('touch', () => { Sound.blip(2640, .15, 'sine', .08); Sound.whoosh(.5, .8); R.flash = .4; tag('Autopilot engaged'); });
   // ---- the garage and the drive ----
+  const fo = F.car.O;
   if (F.gar) {
     const G = F.gar, alarm = t > A.garage && t < A.drive + 8;
-    for (const b of G.beacons) { b.arm.rotation.y = t * 5 + b.bg.position.x; b.bm.material.opacity = alarm ? .22 : 0; b.lamp.material.color.setRGB(alarm ? 4 : .3, alarm ? .1 : .02, .02); }
+    for (const bc of G.beacons) { bc.arm.rotation.y = t * 5 + bc.bg.position.x; bc.bm.material.opacity = alarm ? .22 : 0; bc.lamp.material.color.setRGB(alarm ? 4 : .3, alarm ? .1 : .02, .02); }
     if (alarm && Math.floor(t * 2) !== F.flags.al) { F.flags.al = Math.floor(t * 2); Sound.blip(F.flags.al % 2 ? 960 : 720, .42, 'square', .03); }
     if (t > A.garage) once('gar', () => title('The Garage', 'Autopilot · on its way to you'));
     const doorU = smooth(A.garage + 6, A.drive - .2, t); G.door.children.forEach((sl, i) => { sl.position.y = .26 + i * .56 * (1 - doorU) + doorU * (G.Ht - 1.2 + i * .05); sl.visible = doorU < .98 || i > 5; });
     F.car.lights(smooth(A.garage + 3.2, A.garage + 3.6, t));
     if (t > A.garage + 3.3) once('ign', () => { Sound.hit(.9, 140); Sound.blip(90, .9, 'sawtooth', .08); });
-    F.car.O.visible = t > A.garage - .5 && t < A.seat + 20;
-    // the car along the drive, or parked in the garage before it
-    const td = t - A.drive, l = ffDriveL(td), dir = _fzw;
-    if (!F.parked) {
-      ffPathAt(l, F.car.O.position, dir);
+    fo.visible = t > A.garage - .5;
+    const td = t - A.drive;
+    if (td < FF_DRIVE) { // out of the garage, up the road and in beside you
+      const l = ffDriveL(td), dir = _fzw; ffPathAt(l, fo.position, dir);
       let yaw = Math.atan2(dir.x, dir.z);
-      if (l > F.len - 34) { frameAt(W.main, F.sStop, _ff2); const fy = Math.atan2(_ff2.fwd.x, _ff2.fwd.z); yaw = lerpAng(yaw, fy, smooth(F.len - 34, F.len - 4, l)); } // swing round to face up the road
-      F.car.O.rotation.set(0, yaw, 0);
-      if (td > FF_DRIVE) { F.parked = 1; Sound.hit(.5, 300); }
-      if (td > 0 && td < FF_DRIVE) { const v = td < FF_DRIVE - 5 ? 1 : 0, p = F.car.O.position;
-        if (l > F.len - 34 && Math.random() < .9) W.smoke.spawn(p.x + rand(-1, 1), p.y + .3, p.z + rand(-1, 1), rand(-2, 2), rand(.5, 2), rand(-2, 2), .85, .85, .88, 2.2, 1.6, 5, .6);
-        if (v && Math.random() < .3) W.smoke.spawn(p.x, p.y + .2, p.z, 0, .4, 0, .6, .6, .62, .6, .5, 1.5, .2); }
-      if (td > FF_DRIVE - 5.5) once('drift', () => { Sound.whoosh(.6, 1.4); Sound.blip(420, 1.2, 'sawtooth', .04); tag('Your future car is here'); });
+      if (l > F.len - 45) { frameAt(W.main, F.sArr, _ff2); yaw = lerpAng(yaw, Math.atan2(_ff2.fwd.x, _ff2.fwd.z), smooth(F.len - 20, F.len, l)); }
+      fo.rotation.set(0, yaw, 0);
+      if (td > 0) { const p = fo.position; if (Math.random() < .3) W.smoke.spawn(p.x, p.y + .2, p.z, 0, .4, 0, .6, .6, .62, .6, .5, 1.5, .2); }
+      if (td > FF_DRIVE - 6) once('near', () => { Sound.whoosh(.6, 1.4); tag('Your future car is here'); });
+      if (!F.flags.passW && td > 34) { F.flags.passW = 1; Sound.whoosh(.7, .9); }
+      F.fs = F.sArr; F.fv = F.vEnd;
+    } else if (t < A.go) { // matching your pace, side by side
+      F.fs = ffOldS(Math.min(t, A.seat + .5)) + (t > A.seat + .5 ? ffOldV(A.seat + .5) * (t - A.seat - .5) : 0);
+      F.fv = t > A.seat + .5 ? ffOldV(A.seat + .5) : v;
+      ffAt(F.fs, F.dAlong, .02, fo.position); frameAt(W.main, F.fs, _ff2); fo.rotation.set(0, Math.atan2(_ff2.fwd.x, _ff2.fwd.z), 0);
+    } else { // away: flat out, through the roadblock
+      if (!F.sBlock) { const u = A.thru - A.go; F.sBlock = F.fs + F.fv * u + 8 * u * u; ffBlock(); }
+      F.fv = Math.min(75, F.fv + 16 * dt); F.fs += F.fv * dt;
+      ffAt(F.fs, F.dAlong, .02, fo.position); frameAt(W.main, F.fs, _ff2); fo.rotation.set(0, Math.atan2(_ff2.fwd.x, _ff2.fwd.z), 0);
+      const p = fo.position; if (t < A.go + 2.5) for (let k = 0; k < 2; k++) W.smoke.spawn(p.x + rand(-1, 1), p.y + .3, p.z + rand(-1, 1), rand(-2, 2), rand(.5, 2), rand(-2, 2), .85, .85, .88, 2.4, 1.8, 5, .7);
     }
-    if (!F.flags.passW && td > 30) { F.flags.passW = 1; Sound.whoosh(.7, .9); }
+    fo.updateMatrixWorld(); if (F.car.hasLast) F.car.roll(F.car.last.distanceTo(fo.position)); F.car.last.copy(fo.position); F.car.hasLast = true;
   }
-  // ---- the switch: the canopy lifts, he jumps across from the roof, the canopy closes ----
+  // ---- the switch: the canopy lifts, he stands up in the open cabin, leaps across, and the canopy closes over him ----
   if (t > A.open - 1) { const op = smooth(A.open, A.open + 2.5, t) * (1 - smooth(A.seat + 1.2, A.seat + 3.2, t)); F.car.pv.rotation.x = op * 1.0;
-    if (t > A.open) once('open', () => { Sound.whoosh(.35, 1.4); Sound.blip(300, .5, 'sine', .05); title('Switch', 'The canopy is open'); });
+    if (t > A.open) once('open', () => { Sound.whoosh(.35, 1.4); Sound.blip(300, .5, 'sine', .05); title('Switch', 'Side by side · the canopy is open'); });
     if (t > A.seat + 1.2) once('close', () => { Sound.hit(.45, 400); Sound.blip(1320, .25, 'sine', .05); }); }
-  if (t > A.roof && !F.flags.onRoof) { F.flags.onRoof = 1; F.car.O.updateMatrixWorld(true); W.root.attach(Hh.root); }
-  if (t > A.roof && t < A.seat) {
-    // on the roof of the wreck, crouch, leap across and drop into the seat
-    const roof = _fzc.copy(pm.position); roof.y += 1.18; const seat = _fzl.copy(F.car.seat); F.car.O.localToWorld(seat);
-    const a = clamp((t - A.leap) / (A.seat - A.leap), 0, 1), up = new THREE.Vector3();
-    Hh.root.position.copy(roof).lerp(seat, a); Hh.root.position.y += 2.4 * Math.sin(Math.PI * a) - (a > .85 ? 0 : 0);
-    Hh.root.rotation.set(0, F.car.O.rotation.y + (a > 0 ? 0 : -Math.PI / 2 * (1 - smooth(A.roof + 1.5, A.roof + 3, t))), 0); Hh.root.scale.setScalar(.95);
-    if (t < A.roof + 2.6) hs(Hh, 'stand'); else if (t < A.leap) hs(Hh, 'stand', 'crouch', smooth(A.roof + 2.6, A.leap - .2, t));
-    else hs(Hh, a < .7 ? 'leap' : 'leap', 'sit', smooth(.6, 1, a));
+  if (t > A.stand && !F.flags.up) { F.flags.up = 1; W.root.attach(Hh.root); }
+  if (t > A.stand && t < A.seat) {
+    pm.updateMatrixWorld(); fo.updateMatrixWorld();
+    const rise = smooth(A.stand, A.stand + 1.4, t), from = pm.localToWorld(_fzc.set(-.36, lerp(.28, 1.02, rise), .3)), seat = fo.localToWorld(_fzl.copy(F.car.seat));
+    const a = clamp((t - A.leap) / (A.seat - A.leap), 0, 1);
+    Hh.root.position.copy(from).lerp(seat, smooth(0, 1, a)); Hh.root.position.y += 2.2 * Math.sin(Math.PI * a);
+    const yaw = Math.atan2(_ff.fwd.x, _ff.fwd.z) + (Math.PI / 2) * smooth(A.stand + 1, A.stand + 2.2, t) * (1 - smooth(.55, 1, a));
+    Hh.root.rotation.set(0, yaw, 0); Hh.root.scale.setScalar(.9);
+    if (t < A.stand + 1.4) hs(Hh, 'sit', 'stand', rise); else if (t < A.leap) hs(Hh, 'stand', 'crouch', smooth(A.leap - 1.4, A.leap - .1, t));
+    else hs(Hh, 'leap', 'sit', smooth(.6, 1, a));
+    if (t > A.stand) once('stand', () => tag('Get out of there'));
     if (t > A.leap) once('leap', () => { Sound.whoosh(.7, 1.1); tag('Jump!'); });
   }
-  if (t >= A.seat && !F.flags.inCar) { F.flags.inCar = 1; F.car.O.attach(Hh.root); Hh.root.position.copy(F.car.seat).add(new THREE.Vector3(0, -.12, 0)); Hh.root.rotation.set(0, 0, 0); Hh.root.scale.setScalar(.9); hs(Hh, 'sit'); Sound.hit(.5, 250); }
-  // ---- away: the future car pulls off in a cloud of smoke, then the race is yours again ----
-  if (t > A.go) {
-    once('go', () => { Sound.hit(1, 120); Sound.whoosh(.8, 1.4); title('Future Car', 'Online · autopilot off · all yours'); R.flash = .5; });
-    const u = t - A.go; frameAt(W.main, F.sStop, _ff2); const L = 6 * u * u; ffAt(F.sStop + L, F.dAlong, 0, F.car.O.position); F.car.O.rotation.set(0, Math.atan2(_ff2.fwd.x, _ff2.fwd.z), 0);
-    const p = F.car.O.position; for (let k = 0; k < 2; k++) W.smoke.spawn(p.x + rand(-1, 1), p.y + .3, p.z + rand(-1, 1), rand(-2, 2), rand(.5, 2), rand(-2, 2), .85, .85, .88, 2.4, 1.8, 5, .7);
-    if (t > A.end) { ffFinish(); return; }
-  }
-  F.ts = t > A.hit - .15 && t < A.hit + .8 ? .2 : F.shot === 'leap' ? .35 : F.shot === 'touch' && t < A.touch + .6 ? .5 : 1;
+  if (t >= A.seat && !F.flags.inCar) { F.flags.inCar = 1; fo.attach(Hh.root); Hh.root.position.copy(F.car.seat).add(new THREE.Vector3(0, -.12, 0)); Hh.root.rotation.set(0, 0, 0); Hh.root.scale.setScalar(.9); hs(Hh, 'sit'); Sound.hit(.5, 250); }
+  // ---- away: through the roadblock ----
+  if (t > A.go) once('go', () => { Sound.hit(1, 120); Sound.whoosh(.8, 1.4); title('Future Car', 'Online · autopilot off · all yours'); R.flash = .5; });
+  if (F.rb) ffBlockStep(dt);
+  if (t > A.end) { ffFinish(); return; }
+  F.ts = t > A.hit - .15 && t < A.hit + .8 ? .2 : F.shot === 'leap' ? .35 : F.shot === 'touch' && t < A.touch + .6 ? .5 : F.shot === 'thru' ? .3 : 1;
   // ---- world upkeep (the race itself is frozen) ----
   const focus = F.focusS ?? P.s;
-  W.sparks.update(dt); W.smoke.update(dt);
+  W.sparks.update(dt); W.smoke.update(dt); updateSpeedLines(W.lines, dt, 0, 0);
   _fzk.copy(F.focusP || pm.position); W.sun.position.copy(_fzk).add(W.sunOffset); W.sun.target.position.copy(_fzk);
   ffCamera(dt);
   if (W.GW) W.GW.tick(dt, focus);
@@ -7592,30 +7698,50 @@ function ffStep(dt) {
   if (W.flare) W.flare.position.copy(camera.position).addScaledVector(W.sunDir, 5000);
   R.flash = Math.max(0, R.flash - dt * 1.6);
   finalPass.uniforms.uFilm.value = approach(finalPass.uniforms.uFilm.value, 1, dt * 2.5); finalPass.uniforms.uBlur.value = lerp(finalPass.uniforms.uBlur.value, 0, .1);
-  finalPass.uniforms.uAberr.value = lerp(finalPass.uniforms.uAberr.value, F.shot === 'burst' || F.shot === 'touch' ? .6 : 0, .1); finalPass.uniforms.uFlash.value = R.flash * .3;
-  Sound.engine(true, t < A.hit ? .9 : .18, t < A.hit ? 1 : 0, t < A.hit ? .9 : 0, false, t > A.hit && t < A.stop, false);
+  finalPass.uniforms.uAberr.value = lerp(finalPass.uniforms.uAberr.value, F.shot === 'burst' || F.shot === 'touch' || F.shot === 'thru' ? .6 : 0, .1); finalPass.uniforms.uFlash.value = R.flash * .3;
+  Sound.engine(true, t < A.hit ? .9 : t > A.go ? .8 : .18, t < A.hit || t > A.go ? 1 : 0, t < A.hit ? .9 : 0, false, t > A.hit && t < A.crawl, false);
+}
+// the roadblock: two police cars slewed across the road ahead, a car's width between them
+function ffBlock() {
+  const F = FF, W = race.world; if (!F.cop) return;
+  F.rb = [];
+  [[F.dAlong - 4.1, 1.1], [F.dAlong + 4.1, -1.1]].forEach(([d, a], i) => {
+    const m = i ? F.cop.mesh.clone(true) : F.cop.mesh; if (i) W.root.add(m); m.visible = true;
+    frameAt(W.main, F.sBlock, _ff2); ffAt(F.sBlock + i * 1.5, d, 0, m.position); const y = Math.atan2(_ff2.fwd.x, _ff2.fwd.z) + a; m.rotation.set(0, y, 0);
+    F.rb.push({ m, d, s: F.sBlock + i * 1.5, y, vd: 0, vs: 0, w: 0, hit: false, own: i > 0 }); });
+}
+function ffBlockStep(dt) {
+  const F = FF, W = race.world;
+  for (const b of F.rb) {
+    if (!b.hit && F.fs > b.s - 3.5) { b.hit = true; const side = Math.sign(b.d - F.dAlong); b.vd = side * 9; b.vs = 16; b.w = side * 7;
+      const p = b.m.position; for (let k = 0; k < 50; k++) W.sparks.spawn(p.x, p.y + .6, p.z, rand(-10, 10), rand(2, 8), rand(-10, 10), 4, 2.3, .8, .35, rand(.3, .8), -.2, 1.2, 14);
+      Sound.hit(1.3, 260); race.shake = 1.2; }
+    if (b.hit) { b.d += b.vd * dt; b.s += b.vs * dt; b.y += b.w * dt; const k = Math.exp(-2.2 * dt); b.vd *= k; b.vs *= k; b.w *= k;
+      ffAt(b.s, b.d, 0, b.m.position); b.m.rotation.set(0, b.y, 0); }
+  }
 }
 // hand the race back, in the new car
 function ffFinish() {
   const R = race, P = R.player, W = R.world, F = FF, pm = P.mesh, model = pm.userData.model;
-  // the wreck stays where it stopped
-  if (F.clipMats) for (const m of F.clipMats) m.clippingPlanes = null; F.clipOn = false;
+  // the wreck stays where it stopped, roof back on its engine cover
   const wreck = model.clone(true); wreck.position.copy(pm.position); wreck.quaternion.copy(pm.quaternion); W.root.add(wreck);
-  wreck.traverse(o => { if (o === F.hero.root) o.visible = false; });
-  // your car is now the future car: its body goes on your car's frame
+  if (F.roof) { const rg = F.roof.RG; W.root.attach(rg); }
+  F.dash.visible = false;
+  // your car is now the future car: its body goes on your car's frame, and its wheels turn as you drive
   for (const ch of model.children) ch.visible = false;
   const O = F.car.O; W.root.remove(O); O.position.set(0, 0, 0); O.rotation.set(0, 0, 0); model.add(O); O.visible = true; F.car.lights(1);
   for (const w of pm.userData.wheels || []) w.pivot.scale.y = 1;
-  pm.userData.wheels = []; pm.userData.doors = [];
+  pm.userData.wheels = F.car.wheels; pm.userData.doors = [];
   const L = F.car.L; for (const [t, sx] of [[pm.userData.tailL, 1], [pm.userData.tailR, -1]]) if (t) t.set(sx * .7, .8, -L / 2 - .05);
   for (const fl of pm.userData.flames || []) fl.position.z = -L / 2 - .1;
   P.vmax *= 1.12; P.a0 *= 1.15; P.nitro = 1;
-  P.s = F.sStop + 6 * (FFT.end - FFT.go) ** 2; P.d = F.dAlong; P.v = 12 * (FFT.end - FFT.go); P.yaw = 0; P.slip = 0; P.laneRoute = -99; P.wreck = 0; P.ghost = 1.5;
-  for (const c of R.cops || []) { c.mesh.visible = true; respawnCop(c, -140 - c.copI * 30); }
+  P.s = F.fs; P.d = F.dAlong; P.v = F.fv; P.yaw = 0; P.slip = 0; P.laneRoute = -99; P.wreck = 0; P.ghost = 1.5;
+  for (const c of R.cops || []) { c.mesh.visible = true; respawnCop(c, -160 - c.copI * 30); }
+  if (F.rb) for (const b of F.rb) if (b.own) W.root.remove(b.m);
   for (const r of R.racers) r.mesh.visible = true;
   F.strip.G.visible = false; F.on = false; F.done = true;
   R.camOff = camera.position.clone().sub(pm.position); endCine(); camera.up.set(0, 1, 0);
-  $('hud').classList.remove('movie');
+  $('hud').classList.remove('movie'); { const h = $('skipHint'); if (h && F.hint) h.textContent = F.hint; }
   pop('Future car unlocked', 'var(--nitro)', 'top speed +12% · nitro full');
 }
 // before the race steps: start the film when you pass the mark, and run it in place of the race while it plays
@@ -7643,18 +7769,16 @@ function ffTimeScale() { return FF && FF.on ? FF.ts : 1; }
 function ffCamera(dt) {
   const R = race, P = R.player, F = FF, W = R.world, t = F.t, u = t - F.shotT, pm = P.mesh, A = FFT, H = MAIN_HW;
   const car = _fzk.copy(pm.position); car.y += .7;
-  const look = _fzl; let fov = 50, up = null; F.focusS = null; F.focusP = null;
+  const look = _fzl; let fov = 50; F.focusS = null; F.focusP = null;
   const fc = F.car && F.car.O, fcp = fc ? _fzw.copy(fc.position).setY(fc.position.y + .8) : null;
   const hero = F.hero, head = new THREE.Vector3(); hero.bones.head.getWorldPosition(head);
   const glass = on => { if (F.glassOff === on) return; F.glassOff = on; pm.traverse(o => { if (o.isMesh && o.material && o.material.transparent && (o.material.opacity || 1) < .7) { let q = o, mine = false; while (q) { if (q === hero.root) { mine = true; break; } q = q.parent; } if (!mine) o.visible = !on; } }); };
-  glass(['face', 'band', 'holo', 'holo2', 'touch', 'wait'].includes(F.shot));
-  // the roof lifts clear for the close-ups so the driver's face and the hologram are not hidden behind it
-  // close-ups: slice the car off just above the driver's head (a clipping plane on the car's own materials), so the roof never hides his face and hair
-  if (!F.clipMats) { F.clipMats = new Set(); F.clipPlane = new THREE.Plane(); renderer.localClippingEnabled = true;
-    pm.userData.model.traverse(o => { if (!o.isMesh) return; let q = o; while (q) { if (q === hero.root) return; q = q.parent; } for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (m) F.clipMats.add(m); }); }
-  { const cut = ['face', 'band', 'holo', 'holo2', 'touch'].includes(F.shot); if (cut !== !!F.clipOn) { F.clipOn = cut; for (const m of F.clipMats) m.clippingPlanes = cut ? [F.clipPlane] : null; }
-    if (cut) { pm.updateMatrixWorld(); const n = _fzw.set(0, -1, 0).transformDirection(pm.matrixWorld); F.clipPlane.setFromNormalAndCoplanarPoint(n, pm.localToWorld(_fzv.set(0, .99, 0))); } }
+  glass(['btn', 'face', 'band', 'holo', 'holo2', 'touch'].includes(F.shot));
+  pm.updateMatrixWorld(); const pl = (x, y, z, out) => pm.localToWorld(out.set(x, y, z));
   frameAt(W.main, P.s, _ff);
+  // the nearest road position to a point, so the world streams in around shots away from your car
+  const nearS = (p, a, b) => { let best = a, bd = 1e18; for (let s = a; s < b; s += 40) { frameAt(W.main, s, _ff2); const d = _ff2.pos.distanceToSquared(p); if (d < bd) { bd = d; best = s; } } return best; };
+  const fwdOf = o => new THREE.Vector3(Math.sin(o.rotation.y), 0, Math.cos(o.rotation.y)), rtOf = f => new THREE.Vector3(-f.z, 0, f.x);
   switch (F.shot) {
     case 'strip': // down on the tarmac beside the strip as it snakes across, the car a dot coming at it
       if (!F.cam) F.cam = ffAt(F.sStrip + 3, H - 3, .35, new THREE.Vector3()); _fzc.copy(F.cam); look.copy(ffAt(F.sStrip - 6, 0, .1, _fzv)).lerp(car, .3); fov = 46; break;
@@ -7664,63 +7788,68 @@ function ffCamera(dt) {
       _fzc.copy(car).addScaledVector(_ff.right, -2.6).addScaledVector(_ff.fwd, 1.2); _fzc.y = pm.position.y + .35; look.copy(car).addScaledVector(_ff.fwd, 1.4); look.y -= .4; fov = 58; break;
     case 'skid': // chasing, shaking, as it snakes
       _fzc.copy(car).addScaledVector(_ff.fwd, -9).addScaledVector(_ff.right, -2); _fzc.y += 1.6; look.copy(car); fov = 60; R.shake = Math.max(R.shake, .4); break;
-    case 'drone': // high above as it slews to a stop on the verge
+    case 'drone': // high above as it slews across the road
       _fzc.copy(car).addScaledVector(_ff.fwd, 6).addScaledVector(_ff.right, -12); _fzc.y += 22 - u * 1.5; look.copy(car); fov = 48; break;
-    case 'still': // low in front, pushing in on the smoking car
-      _fzc.copy(car).addScaledVector(_ff.fwd, 12 - u * 1.4).addScaledVector(_ff.right, -4.5); _fzc.y = pm.position.y + .8; look.copy(car); fov = 44; break;
-    case 'face': // over the bonnet, through the open windscreen: the driver, shades, hair, looking down at his wrist
-      pm.updateMatrixWorld(); _fzc.copy(pm.localToWorld(new THREE.Vector3(-1.05 + u * .1, 1.75 - u * .05, 2.9 - u * .12))); look.copy(head); look.y += .04; fov = 28 - u; break;
+    case 'crawl': // low on the road ahead: the car limping at you on its rims, sparks trailing
+      if (!F.cam) F.cam = _fzc.copy(car).addScaledVector(_ff.fwd, 22).addScaledVector(_ff.right, -3.5).setY(pm.position.y + .5).clone(); _fzc.copy(F.cam); look.copy(car); fov = 40; break;
+    case 'btn': // from the passenger seat: his hand going to the touchscreen, OPEN lighting up
+      pl(.5, 1.1, -.05, _fzc); F.dash.getWorldPosition(look).lerp(head, .25); fov = 50; break;
+    case 'roofup': // up and out front: the top lifting off and sliding back, the driver in the open air
+      pl(-3.4 + u * .25, 2.7 - u * .08, 4.2 - u * .2, _fzc); pl(0, .9, -.5, look); fov = 42; break;
+    case 'face': // over the bonnet: the driver, shades, slicked hair, looking down at his wrist
+      pl(-1.05 + u * .1, 1.75 - u * .05, 2.9 - u * .12, _fzc); look.copy(head); look.y += .04; fov = 28 - u; break;
     case 'band': { // the bracelet close up as he presses it
-      pm.updateMatrixWorld(); heroBand(hero, _fzv); _fzc.copy(_fzv).addScaledVector(_ff.fwd, .3 - u * .02).addScaledVector(_ff.right, .14); _fzc.y += .4 - u * .02; look.copy(_fzv); fov = 36; break; }
+      heroBand(hero, _fzv); _fzc.copy(_fzv).addScaledVector(_ff.fwd, .3 - u * .02).addScaledVector(_ff.right, .14); _fzc.y += .4 - u * .02; look.copy(_fzv); fov = 36; break; }
     case 'holo': { // the hologram rising out of it, his face lit behind it
-      pm.updateMatrixWorld(); const h = F.holo.g.position; _fzc.copy(pm.localToWorld(new THREE.Vector3(.7, 1.45, 3.1))); look.copy(h).lerp(head, .25); fov = 38; break; }
+      const h = F.holo.g.position; pl(.7, 1.45, 3.1, _fzc); look.copy(h).lerp(head, .25); fov = 38; break; }
     case 'holo2': { // sweep round the hologram, out over the bonnet
-      pm.updateMatrixWorld(); const h = F.holo.g.position, a = smooth(0, 6, u); _fzc.copy(pm.localToWorld(new THREE.Vector3(lerp(.9, -1.5, a), 1.5, lerp(3.2, 2.6, a)))); look.copy(h); fov = 40; break; }
+      const h = F.holo.g.position, a = smooth(0, 6, u); pl(lerp(.9, -1.5, a), 1.5, lerp(3.2, 2.6, a), _fzc); look.copy(h); fov = 40; break; }
     case 'touch': { // his finger into the light
-      pm.updateMatrixWorld(); const h = F.holo.g.position; _fzc.copy(pm.localToWorld(new THREE.Vector3(-.4, 1.35, 2.6))); look.copy(h); fov = 42; break; }
+      const h = F.holo.g.position; pl(-.4, 1.35, 2.6, _fzc); look.copy(h); fov = 42; break; }
     case 'garage': { const G = F.gar; F.focusS = F.sG; F.focusP = G.G.position; G.local(-12, 5.2, 7.5, _fzc); look.copy(G.local(0, 1, -2, _fzv)); fov = 55; break; }
     case 'lights': { const G = F.gar; F.focusS = F.sG; F.focusP = G.G.position; G.local(1.8, .55, 3.2 - u * .1, _fzc); look.copy(fcp); fov = 44; break; }
     case 'door': { const G = F.gar; F.focusS = F.sG; F.focusP = G.G.position; G.local(3, 1.2, G.Dp / 2 + 14, _fzc); look.copy(G.local(0, 1.8, 0, _fzv)); fov = 46; break; }
-    default: F.focusS = null;
+    case 'cops': { // over your shoulder, back down the road: the police closing in, lights flashing
+      const c = F.chase[0]; _fzc.copy(car).addScaledVector(_ff.fwd, 2.5).addScaledVector(_ff.right, 2.6); _fzc.y += 1.5; look.copy(c ? c.mesh.position : car).setY(car.y); fov = 20; break; }
+    case 'wait': // his head turned, looking back for his car
+      pl(-2.3, 1.55, 2.4, _fzc); pl(-.36, .95, -3, look); fov = 40; break;
+    case 'arrive': // from beside your car: the future car coming up and settling in alongside
+      _fzc.copy(car).addScaledVector(_ff.fwd, 7).addScaledVector(_ff.right, -1.5); _fzc.y += 1.3; look.copy(fcp).lerp(car, .3); fov = 48; break;
+    case 'open': // both cars rolling side by side, the canopy lifting
+      _fzc.copy(fcp).addScaledVector(_ff.fwd, 9 - u * .4).addScaledVector(_ff.right, -5); _fzc.y += 2.4; look.copy(car).lerp(fcp, .6); fov = 44; break;
+    case 'stand': // low at the front corner: he stands up in the open cabin, the wind in his face
+      pl(-1.9, .9, 3.4, _fzc); look.copy(hero.root.position); look.y += .6; fov = 44; break;
+    case 'leap': { const a = u * .9, mid = _fzv.copy(car).lerp(fcp, .5); _fzc.copy(mid).addScaledVector(_ff.fwd, -Math.cos(a) * 6.5).addScaledVector(_ff.right, Math.sin(a) * 2.5); _fzc.y += 2.2; look.copy(hero.root.position); look.y += .8; fov = 50; break; }
+    case 'seat': _fzc.copy(fcp).addScaledVector(_ff.fwd, 3.2).addScaledVector(_ff.right, -1.6); _fzc.y += 1.2; look.copy(fcp); look.y += .3; fov = 44; break;
+    case 'block': // from behind the roadblock: the police cars across the road, and the future car coming flat out at them
+      F.focusS = F.sBlock; if (!F.cam) F.cam = ffAt(F.sBlock + 18, F.dAlong + 1.2, .8, new THREE.Vector3()); _fzc.copy(F.cam); look.copy(fcp); fov = 34; break;
+    case 'thru': // slow motion, side on: through the gap, the police cars knocked spinning
+      F.focusS = F.sBlock; if (!F.cam) F.cam = ffAt(F.sBlock + 1, F.dAlong - 9, 1.1, new THREE.Vector3()); _fzc.copy(F.cam); look.copy(fcp); fov = 40; break;
+    case 'away': // past the wreckage: the future car gone up the road, the police left spinning
+      F.focusS = F.fs; if (!F.cam) F.cam = ffAt(F.sBlock - 8, F.dAlong + 6, 2.2, new THREE.Vector3()); _fzc.copy(F.cam); look.copy(fcp); fov = lerp(40, 22, smooth(0, 5, u)); break;
   }
-  if (F.shot && ['out', 'drone2', 'wheel', 'cockpit', 'front', 'pass', 'arrive', 'halt'].includes(F.shot)) {
-    const p = fc.position, fwd = _fzv.set(Math.sin(fc.rotation.y), 0, Math.cos(fc.rotation.y)), rt = _fzq.isQuaternion ? new THREE.Vector3(fwd.z, 0, -fwd.x) : null;
-    F.focusP = p; F.focusS = F.sStop + (F.len - ffDriveL(t - A.drive)) * 0; // chunks: see below
-    { let best = F.sStop, bd = 1e18; for (let s = F.sStop - 100; s < F.sG + 200; s += 50) { frameAt(W.main, s, _ff2); const d = _ff2.pos.distanceToSquared(p); if (d < bd) { bd = d; best = s; } } F.focusS = best; }
+  if (['out', 'drone2', 'wheel', 'cockpit', 'front', 'pass'].includes(F.shot)) {
+    const p = fc.position, fwd = fwdOf(fc), rt = rtOf(fwd);
+    F.focusP = p; F.focusS = nearS(p, F.sG - 200, F.sArr + 100);
     switch (F.shot) {
       case 'out': { const G = F.gar; G.local(-7, 2.2, G.Dp / 2 + 6 + u * .5, _fzc); look.copy(fcp); fov = 50; break; }
       case 'drone2': _fzc.copy(p).addScaledVector(fwd, -14).addScaledVector(rt, 6); _fzc.y += 14; look.copy(fcp).addScaledVector(fwd, 10); fov = 55; break;
       case 'wheel': _fzc.copy(p).addScaledVector(rt, -2.2).addScaledVector(fwd, .9); _fzc.y += .45; look.copy(fcp).addScaledVector(fwd, 2); fov = 62; break;
-      case 'cockpit': { // inside the canopy: an empty seat, the wheel turning on its own, the road pouring in
-        _fzc.copy(p).addScaledVector(fwd, -.3); _fzc.y += 1.28; look.copy(p).addScaledVector(fwd, 12); look.y += .9; fov = 68; break; }
-      case 'front': _fzc.copy(p).addScaledVector(fwd, 13 - (u % 5.5) * .6).addScaledVector(rt, -1.5); _fzc.y += .7; look.copy(fcp); fov = 48; break;
-      case 'pass': if (!F.cam) F.cam = _fzc.copy(p).addScaledVector(fwd, 150).addScaledVector(rt, -12).setY(p.y + 1.2).clone(); _fzc.copy(F.cam); look.copy(fcp); fov = 38; break;
-      case 'arrive': // from beside the wreck: the car coming down the road at you and swinging in
-        _fzc.copy(car).addScaledVector(_ff.fwd, -8).addScaledVector(_ff.right, 3); _fzc.y += 1.1; look.copy(fcp).lerp(car, .2); fov = 50; F.focusS = P.s; break;
-      default: // halt: both cars side by side, from the front
-        _fzc.copy(car).addScaledVector(_ff.fwd, 11 + u * .3).addScaledVector(_ff.right, -2.5); _fzc.y += 1.4; look.copy(car).lerp(fcp, .5); fov = 48; F.focusS = P.s;
-    }
-  }
-  if (F.shot === 'wait') { _fzc.copy(head).addScaledVector(_ff.right, -1.1).addScaledVector(_ff.fwd, -.3); _fzc.y += .1; look.copy(head).addScaledVector(_ff.fwd, 3); fov = 46; }
-  if (['open', 'roof', 'leap', 'seat', 'go'].includes(F.shot)) {
-    const p = fc.position; F.focusS = P.s;
-    switch (F.shot) {
-      case 'open': _fzc.copy(p).addScaledVector(_ff.fwd, -7).addScaledVector(_ff.right, -3.5); _fzc.y += 2.6; look.copy(fcp); fov = 46; break;
-      case 'roof': _fzc.copy(car).addScaledVector(_ff.fwd, 6).addScaledVector(_ff.right, 2.5); _fzc.y += .4; look.copy(hero.root.position); look.y += 1.1; fov = 44; break;
-      case 'leap': { const a = u * .9; const mid = _fzv.copy(car).lerp(fcp, .5); _fzc.copy(mid).addScaledVector(_ff.fwd, Math.cos(a) * 6.5).addScaledVector(_ff.right, Math.sin(a) * 2.5); _fzc.y += 2.2; look.copy(hero.root.position); look.y += .8; fov = 50; break; }
-      case 'seat': _fzc.copy(p).addScaledVector(_ff.fwd, 3.2).addScaledVector(_ff.right, -1.6); _fzc.y += 1.8; look.copy(p); look.y += 1.1; fov = 44; break;
-      default: _fzc.copy(ffAt(F.sStop - 6, F.dAlong - 1.2, .5, _fzv)); look.copy(fcp); fov = 46;
+      case 'cockpit': _fzc.copy(p).addScaledVector(fwd, -.3); _fzc.y += 1.28; look.copy(p).addScaledVector(fwd, 12); look.y += .9; fov = 68; break;
+      case 'front': _fzc.copy(p).addScaledVector(fwd, 13 - u * .6).addScaledVector(rt, -1.5); _fzc.y += .7; look.copy(fcp); fov = 48; break;
+      case 'pass': if (!F.cam) F.cam = _fzc.copy(p).addScaledVector(fwd, 150).addScaledVector(rt, -8).setY(p.y + 1.2).clone(); _fzc.copy(F.cam); look.copy(fcp); fov = 38; break;
     }
   }
   if (F.dbg) { const d = F.dbg(); _fzc.copy(d.p); look.copy(d.l); fov = d.f || 40; }
   camera.position.copy(_fzc);
   if (R.shake > 0) { const s = R.shake * .1; camera.position.x += rand(-s, s); camera.position.y += rand(-s, s); R.shake = Math.max(0, R.shake - dt * 2); }
-  if (up) camera.up.copy(up); else camera.up.set(0, 1, 0); camera.lookAt(look);
-  camera.near = ['face', 'band', 'holo', 'holo2', 'touch', 'wait', 'cockpit'].includes(F.shot) ? .02 : .1;
+  camera.up.set(0, 1, 0); camera.lookAt(look);
+  camera.near = ['btn', 'face', 'band', 'holo', 'holo2', 'touch', 'wait', 'cockpit'].includes(F.shot) ? .02 : .1;
   R.fov = fov; camera.fov = fov; camera.updateProjectionMatrix();
   R.camOff = null;
 }
 window.__ff = () => FF;
+window.__ffc = ffCar;
 
 
 /* ============================ PARTICLES / FX ============================ */
@@ -8869,9 +8998,9 @@ function resize() {
   for (const k in worlds) { worlds[k].sparks.mat.uniforms.scale.value = h * DPR * .6; worlds[k].smoke.mat.uniforms.scale.value = h * DPR * .6; }
 }
 addEventListener('resize', resize);
-const skipIntro = () => {
+const skipIntro = e => {
   if (gusTap()) return;
-  if (mode === 'race' && ffSkip()) return;
+  if (mode === 'race' && FF && FF.on) { if (!(e && e.type === 'pointerdown')) ffSkip(); return; } // the future-car film skips only on Enter, so a stray tap never cuts it short
   if (mode === 'race' && race && race.cine && race.cine.type === 'gus' && race.cine.t > .5) { race.camOff = camera.position.clone().sub(race.player.mesh.position); endCine(); return; }
   if (mode === 'race' && race && race.finale && !race.finale.over && race.finale.t > .8) { endFinale(); return; }
   if (mode === 'race' && race && race.state === 'intro' && race.introT > .4) race.introT = Math.max(race.introT, race.introDur - .5);
@@ -8896,6 +9025,7 @@ function adaptQuality(ms) {
 }
 function frame(now) {
   requestAnimationFrame(frame);
+  if (window.__hold) { last = now; return; } // frame-by-frame capture (debug hook): the capture drives stepping and rendering
   const dt = Math.min(1 / 30, (now - last) / 1000); last = now;
   finalPass.uniforms.uTime.value = (now / 1000) % 100;
   adaptQuality(now - last0); last0 = now;
@@ -8909,6 +9039,6 @@ garage.setCar(CARS[sel.car], PAINTS[sel.paint]);
 syncMech();
 toGarage();
 requestAnimationFrame(frame);
-window.__apex = { Q, renderer, skipIntro, startRace, toGarage, input, get race() { return race; }, sim(n, dt = 1 / 60) { for (let i = 0; i < n; i++) stepRace(dt); }, drawHUD, models: CAR_MODELS, props: PROP_MODELS, garage, setConvoyType, camera };
+window.__apex = { Q, renderer, skipIntro, startRace, toGarage, input, get race() { return race; }, sim(n, dt = 1 / 60) { for (let i = 0; i < n; i++) stepRace(dt); }, grab(q = .88) { finalPass.uniforms.uTime.value = performance.now() / 1000 % 100; composer.render(); return renderer.domElement.toDataURL('image/jpeg', q); }, drawHUD, models: CAR_MODELS, props: PROP_MODELS, garage, setConvoyType, camera };
 
 })();</script>
