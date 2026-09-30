@@ -1,0 +1,11 @@
+Model Information:
+* title:	Character with Clothes
+* source:	https://sketchfab.com/3d-models/character-with-clothes-32751cc4a17d4c31a3809f16637d2150
+* author:	sapenton8821 (https://sketchfab.com/sapenton8821)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Character with Clothes" (https://sketchfab.com/3d-models/character-with-clothes-32751cc4a17d4c31a3809f16637d2150) by sapenton8821 (https://sketchfab.com/sapenton8821) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

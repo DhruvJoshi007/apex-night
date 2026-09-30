@@ -1,6 +1,6 @@
 # Apex Nights
 
-A browser street-racing game: one 53 km Grand Tour through ten regions, with shortcuts, train-roof police chases, stunt ramps and a metro-bridge jump.
+A browser street-racing game: one 53 km Grand Tour through ten regions, with shortcuts, train-roof police chases, a gun-train helicopter fight, level-crossing and viaduct stunts, an underground chase, and a spike-strip cutscene where your future car drives itself to you.
 
 **Play:** https://dhruvjoshi007.github.io/apex-night/
 
@@ -24,6 +24,8 @@ Controls: W throttle, S brake, A/D or ←/→ change lanes, Space drift, hold Sh
 - **riy** (city metro, second line, and the dusk-city ride train): [Riyadh Metro](https://sketchfab.com/3d-models/riyadh-metro-4b2458243ed64df790ecc2c8347ed492) by Meshal Al-harbi (https://sketchfab.com/meshal.alharbi.me2), CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/)
 - **nyc** (steam locomotive on the freight trains): [New York Central #1905 Steam Locomotive](https://sketchfab.com/3d-models/new-york-central-1905-steam-locomotive-fa8a944703bb4e83b824aae06880857c) by Geoffrey The Purple Engine (https://sketchfab.com/GeoffreyThePurpleEngine), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 - **gus** (the desert gun train): [Gustav](https://sketchfab.com/3d-models/gustav-830ec297e9364c138a0934983403eba2) by Leafia dev. (https://sketchfab.com/Leaf_dev), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+- **fut** (the future car in the 60% cutscene): [Future Car](https://sketchfab.com/3d-models/future-car-hliAt7xc6YU2XjXh5G4lzmQwFmR) by 3DHaupt (https://sketchfab.com/3DHaupt), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+- **chr** (the driver, rigged and given hair, sunglasses and a bracelet in code): [Character with Clothes](https://sketchfab.com/3d-models/character-with-clothes-32751cc4a17d4c31a3809f16637d2150) by sapenton8821 (https://sketchfab.com/sapenton8821), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 - **Passengers** (built into the page): [HUMAN_BODY](https://sketchfab.com/3d-models/human-body-f022e4a3641943328b2fbfdf0f7c3e1e) by vistaalienprime (https://sketchfab.com/vistaalienprime5665288), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 
 Each model folder keeps its original `license.txt`. The models were converted for the game; no endorsement by the authors is implied.
