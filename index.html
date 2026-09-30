@@ -7217,7 +7217,7 @@ function makeHero(m) {
   const v = new THREE.Vector3(), ab = new THREE.Vector3(), av = new THREE.Vector3();
   const dist = (s, p) => { ab.subVectors(s.b, s.a); av.subVectors(p, s.a); const t = clamp(av.dot(ab) / ab.lengthSq(), 0, 1); return av.sub(ab.multiplyScalar(t)).length(); };
   // the look: a black suit (the shirt and jeans darkened), dark shoes, the skin a touch warmer
-  const tint = { Shirt_MAT: '#040506', Jeans_MAT: '#070709', shoes_MAT: '#020202', Skin_MAT: '#c9a58e' };
+  const tint = { Shirt_MAT: '#040506', Jeans_MAT: '#070709', shoes_MAT: '#020202', Skin_MAT: '#b4a79e' };
   const meshes = []; m.updateMatrixWorld(true);
   m.traverse(o => { if (!o.isMesh) return;
     const g = new THREE.BufferGeometry(); // quantised attributes to plain floats first, so the transform applies cleanly
@@ -7240,24 +7240,33 @@ function makeHero(m) {
     const sm = new THREE.SkinnedMesh(g, mat); sm.castShadow = true; sm.frustumCulled = false; body.add(sm); meshes.push(sm); });
   body.updateMatrixWorld(true); for (const sm of meshes) sm.bind(skel, sm.matrixWorld);
   // ---- hair: slicked straight back, glossy black, a full top with short sides, cut round the ears and the nape ----
-  const hairTex = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#0d0b0a'; g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 900; i++) { const x = rand(0, w), c = rand(10, 48) | 0; g.strokeStyle = `rgba(${c + 8},${c + 4},${c},${rand(.25, .7)})`; g.lineWidth = rand(.6, 1.8); g.beginPath(); g.moveTo(x, 0); g.bezierCurveTo(x + rand(-6, 6), h * .33, x + rand(-8, 8), h * .66, x + rand(-10, 10), h); g.stroke(); } });
-  const hairM = new THREE.MeshStandardMaterial({ map: hairTex, color: '#ffffff', roughness: .32, metalness: .1, side: THREE.DoubleSide });
+  const hairTex = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#0e0b09'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 1400; i++) { const x = rand(0, w), c = rand(10, 52) | 0; g.strokeStyle = `rgba(${c + 10},${c + 5},${c},${rand(.3, .8)})`; g.lineWidth = rand(.5, 1.6); g.beginPath(); g.moveTo(x, 0); g.bezierCurveTo(x + rand(-5, 5), h * .33, x + rand(-6, 6), h * .66, x + rand(-8, 8), h); g.stroke(); } });
+  // wet-look pomade: a glossy clear coat over the strands
+  const hairM = new THREE.MeshPhysicalMaterial({ map: hairTex, color: '#ffffff', roughness: .5, metalness: 0, clearcoat: .35, clearcoatRoughness: .3, envMapIntensity: .2, side: THREE.DoubleSide, vertexColors: true, transparent: true });
   { const hg = new THREE.SphereGeometry(1, 96, 64), p = hg.attributes.position, keep = [], idx = hg.index.array;
     // fit the skull: centre and radii measured off the model's head (x ±7.3, z -5.6..13, top at 74.7)
-    const C = new THREE.Vector3(0, 64.8, 3.6), Rd = new THREE.Vector3(8.05, 10.2, 10.3);
+    const C = new THREE.Vector3(0, 64.8, 3.6), Rd = new THREE.Vector3(8.0, 10.2, 10.2);
     for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i);
-      // thicker on top and swept back into a slight rise at the front
-      const top = Math.max(0, v.y), front = Math.max(0, v.z) * Math.max(0, v.y);
-      const low = Math.max(0, -v.y); p.setXYZ(i, C.x + v.x * Rd.x * (1 + .03 * top - .16 * low * Math.max(0, -v.z)), C.y + v.y * Rd.y + top * .7 + front * 1.6, C.z + v.z * Rd.z * (1 - .1 * low) + top * .5 - front * .4); }
-    const cutY = (x, z) => { // hairline: the brow at the front, above the ears at the sides, the nape at the back
-      const zn = (z - C.z) / Rd.z, xn = Math.abs(x) / Rd.x;
-      return zn > .5 ? 70.6 + (zn - .5) * 2 : xn > .72 && zn > -.45 ? 66.2 + Math.max(0, zn) * 3 : 57.8 + Math.max(0, zn + .45) * 9; };
+      // slicked back: volume on top swept up off the brow, the sides and back cut short and tight to the skull
+      const top = Math.max(0, v.y), front = Math.max(0, v.z) * Math.max(0, v.y), low = Math.max(0, -v.y), tight = 1 - (.05 + .2 * Math.max(0, -v.z)) * clamp((.4 - v.y) / .9, 0, 1);
+      p.setXYZ(i, C.x + v.x * Rd.x * tight * (1 + .03 * top - .16 * low * Math.max(0, -v.z)), C.y + v.y * Rd.y + top * .9 + front * 2.2, C.z + v.z * Rd.z * tight * (1 - .1 * low) + top * .6 - front * .3); }
+    // the hairline: high on the brow with the temples a touch receded, above the ears, then down the back of the head to the nape
+    const cutY = (x, z) => { const zn = (z - C.z) / Rd.z, xn = Math.abs(x) / Rd.x;
+      if (zn > .45) return 70.5 + (zn - .45) * 2 + Math.max(0, xn - .3) * 2.4;
+      if (xn > .7 && zn > -.4) return 65.6 + Math.max(0, zn) * 5;
+      return 59.6 + Math.max(0, zn + .4) * 9; };
+    const col = new Float32Array(p.count * 4);
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), zn = (z - C.z) / Rd.z, c = cutY(x, z);
+      // a short fade on the sides and back (the hair thins to nothing over ~2.5 cm), a crisp line at the front
+      const f = zn > .45 ? clamp((y - c) / .6, 0, 1) : clamp((y - c) / 1.8, 0, 1);
+      col.set([1, 1, 1, f * f * (3 - 2 * f)], i * 4); }
+    hg.setAttribute('color', new THREE.BufferAttribute(col, 4));
     for (let t = 0; t < idx.length; t += 3) { let cy = 0, cx = 0, cz = 0; for (let k = 0; k < 3; k++) { cx += p.getX(idx[t + k]); cy += p.getY(idx[t + k]); cz += p.getZ(idx[t + k]); }
-      cx /= 3; cy /= 3; cz /= 3; if (cy > cutY(cx, cz)) keep.push(idx[t], idx[t + 1], idx[t + 2]); }
+      cx /= 3; cy /= 3; cz /= 3; if (cy > cutY(cx, cz) - .3) keep.push(idx[t], idx[t + 1], idx[t + 2]); }
     hg.setIndex(keep); hg.computeVertexNormals();
     const uv = hg.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, (p.getX(i) - C.x) / Rd.x * 1.5 + (p.getY(i) - C.y) * .02, (p.getZ(i) - C.z) / Rd.z * .5); // strands run front to back
-    const hair = new THREE.Mesh(hg, hairM); hair.castShadow = true; hair.position.set(-HERO_J.head[0][0], -HERO_J.head[0][1], -HERO_J.head[0][2]); bones.head.add(hair); }
+    const hair = new THREE.Mesh(hg, hairM); hair.castShadow = true; hair.renderOrder = 2; hair.position.set(-HERO_J.head[0][0], -HERO_J.head[0][1], -HERO_J.head[0][2]); bones.head.add(hair); }
   // ---- sunglasses: two dark lenses on a thin gold bridge and arms ----
   { const lensM = new THREE.MeshPhysicalMaterial({ color: '#07080a', metalness: .6, roughness: .05, clearcoat: 1, envMapIntensity: 2.5 }), goldM = new THREE.MeshStandardMaterial({ color: '#c9a24a', metalness: 1, roughness: .25 });
     const G = new THREE.Group(); G.position.set(0, 65.4 - HERO_J.head[0][1], 13.1 - HERO_J.head[0][2]); bones.head.add(G);
@@ -7590,6 +7599,7 @@ function ffStep(dt) {
 function ffFinish() {
   const R = race, P = R.player, W = R.world, F = FF, pm = P.mesh, model = pm.userData.model;
   // the wreck stays where it stopped
+  if (F.clipMats) for (const m of F.clipMats) m.clippingPlanes = null; F.clipOn = false;
   const wreck = model.clone(true); wreck.position.copy(pm.position); wreck.quaternion.copy(pm.quaternion); W.root.add(wreck);
   wreck.traverse(o => { if (o === F.hero.root) o.visible = false; });
   // your car is now the future car: its body goes on your car's frame
@@ -7615,10 +7625,19 @@ function ffGate(dt) {
   if (FF.on) { ffStep(dt); return true; }
   if (FF.done || R.state !== 'race' || !ffReady()) return false;
   const P = R.player, L = R.world.main.L;
-  if (P.route >= 0 || P.s < L * FF_AT || P.s > L * FF_AT + 900) return false;
+  if (location.hash === '#film' && !FF.jumped && R.state === 'race') { FF.jumped = true; ffJump(); } // #film on the link: straight to the film
+  if (P.route >= 0 || P.s < L * FF_AT || P.s > L * (FF_AT + .12)) return false;
   if (R.ride || P.jump || P.wreck > 0 || R.finale || (R.cine && R.cine.type !== 'lane')) return false;
   ffStart(); ffStep(dt); return true;
 }
+// the #film link: drop the car on the road a few hundred metres before the mark, the police just behind
+function ffJump() {
+  const R = race, P = R.player, L = R.world.main.L; P.route = -1; P.s = L * FF_AT - 300; P.dist = P.s; P.d = 0; P.lane = 1; P.laneRoute = -99; P.wreck = 0; P.jump = null; R.ride = null; if (R.cine) endCine();
+  for (const c of R.cops || []) { c.s = P.s - 30 - c.copI * 10; c.route = -1; c.lap = P.lap; c.dist = P.dist - 30 - c.copI * 10; c.wreck = 0; c.ride = null; }
+  if (R.grand) for (let i = 0; i < 7; i++) R.grand.shown[i] = 1;
+}
+// Enter or a tap fast-forwards to the handover: the film runs on at speed, off screen, until he is in the new car
+function ffSkip() { if (!FF || !FF.on || FF.t < 1 || FF.t >= FFT.go) return false; let n = 0; while (FF.on && FF.t < FFT.go && n++ < 4000) ffStep(1 / 30); return true; }
 function ffTimeScale() { return FF && FF.on ? FF.ts : 1; }
 // ---------- cameras ----------
 function ffCamera(dt) {
@@ -7630,10 +7649,11 @@ function ffCamera(dt) {
   const glass = on => { if (F.glassOff === on) return; F.glassOff = on; pm.traverse(o => { if (o.isMesh && o.material && o.material.transparent && (o.material.opacity || 1) < .7) { let q = o, mine = false; while (q) { if (q === hero.root) { mine = true; break; } q = q.parent; } if (!mine) o.visible = !on; } }); };
   glass(['face', 'band', 'holo', 'holo2', 'touch', 'wait'].includes(F.shot));
   // the roof lifts clear for the close-ups so the driver's face and the hologram are not hidden behind it
-  if (!F.roofs) { F.roofs = []; pm.updateMatrixWorld(true); const inv = pm.matrixWorld.clone().invert(), bb = new THREE.Box3();
-    pm.userData.model.traverse(o => { if (!o.isMesh || !o.geometry) return; if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); bb.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld).applyMatrix4(inv);
-      if (bb.min.y > .95 && bb.max.y < 1.5 && bb.max.x - bb.min.x > .8 && bb.max.z - bb.min.z > .6 && bb.max.z < 1.3) F.roofs.push(o); }); }
-  { const off = ['face', 'band', 'holo', 'holo2', 'touch'].includes(F.shot); for (const o of F.roofs) o.visible = !off; }
+  // close-ups: slice the car off just above the driver's head (a clipping plane on the car's own materials), so the roof never hides his face and hair
+  if (!F.clipMats) { F.clipMats = new Set(); F.clipPlane = new THREE.Plane(); renderer.localClippingEnabled = true;
+    pm.userData.model.traverse(o => { if (!o.isMesh) return; let q = o; while (q) { if (q === hero.root) return; q = q.parent; } for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (m) F.clipMats.add(m); }); }
+  { const cut = ['face', 'band', 'holo', 'holo2', 'touch'].includes(F.shot); if (cut !== !!F.clipOn) { F.clipOn = cut; for (const m of F.clipMats) m.clippingPlanes = cut ? [F.clipPlane] : null; }
+    if (cut) { pm.updateMatrixWorld(); const n = _fzw.set(0, -1, 0).transformDirection(pm.matrixWorld); F.clipPlane.setFromNormalAndCoplanarPoint(n, pm.localToWorld(_fzv.set(0, .99, 0))); } }
   frameAt(W.main, P.s, _ff);
   switch (F.shot) {
     case 'strip': // down on the tarmac beside the strip as it snakes across, the car a dot coming at it
@@ -7651,7 +7671,7 @@ function ffCamera(dt) {
     case 'face': // over the bonnet, through the open windscreen: the driver, shades, hair, looking down at his wrist
       pm.updateMatrixWorld(); _fzc.copy(pm.localToWorld(new THREE.Vector3(-1.05 + u * .1, 1.75 - u * .05, 2.9 - u * .12))); look.copy(head); look.y += .04; fov = 28 - u; break;
     case 'band': { // the bracelet close up as he presses it
-      pm.updateMatrixWorld(); heroBand(hero, _fzv); _fzc.copy(pm.localToWorld(new THREE.Vector3(.25, 1.35, 2.75))); _fzc.lerp(_fzv, .32); look.copy(_fzv); fov = 34; break; }
+      pm.updateMatrixWorld(); heroBand(hero, _fzv); _fzc.copy(_fzv).addScaledVector(_ff.fwd, .3 - u * .02).addScaledVector(_ff.right, .14); _fzc.y += .4 - u * .02; look.copy(_fzv); fov = 36; break; }
     case 'holo': { // the hologram rising out of it, his face lit behind it
       pm.updateMatrixWorld(); const h = F.holo.g.position; _fzc.copy(pm.localToWorld(new THREE.Vector3(.7, 1.45, 3.1))); look.copy(h).lerp(head, .25); fov = 38; break; }
     case 'holo2': { // sweep round the hologram, out over the bonnet
@@ -8851,6 +8871,7 @@ function resize() {
 addEventListener('resize', resize);
 const skipIntro = () => {
   if (gusTap()) return;
+  if (mode === 'race' && ffSkip()) return;
   if (mode === 'race' && race && race.cine && race.cine.type === 'gus' && race.cine.t > .5) { race.camOff = camera.position.clone().sub(race.player.mesh.position); endCine(); return; }
   if (mode === 'race' && race && race.finale && !race.finale.over && race.finale.t > .8) { endFinale(); return; }
   if (mode === 'race' && race && race.state === 'intro' && race.introT > .4) race.introT = Math.max(race.introT, race.introDur - .5);

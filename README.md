@@ -4,7 +4,7 @@ A browser street-racing game: one 53 km Grand Tour through ten regions, with sho
 
 **Play:** https://dhruvjoshi007.github.io/apex-night/
 
-Controls: W throttle, S brake, A/D or ←/→ change lanes, Space drift, hold Shift for nitro, Enter or tap to skip cutscenes.
+Controls: W throttle, S brake, A/D or ←/→ change lanes, Space drift, hold Shift for nitro, Enter or tap to skip cutscenes. Add `#film` to the link to jump straight to the future-car cutscene.
 
 ## Car model credits
 
